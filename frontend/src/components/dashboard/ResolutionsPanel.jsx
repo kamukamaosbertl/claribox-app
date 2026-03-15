@@ -3,28 +3,21 @@ import { CheckCircle, Plus, X, Send, Clock, Sparkles } from 'lucide-react';
 import { adminAPI } from '../../services/api';
 
 const STATUS_STYLES = {
-  'Completed':   { bg: '#f0fdf4', text: '#15803d', dot: '#22c55e' },
-  'In Progress': { bg: '#fffbeb', text: '#b45309', dot: '#f59e0b' },
-  'Planned':     { bg: '#eef2ff', text: '#4338ca', dot: '#6366f1' },
+  'Completed':   { badge: 'bg-green-50 text-green-700',  dot: 'bg-green-500'  },
+  'In Progress': { badge: 'bg-amber-50 text-amber-700',  dot: 'bg-amber-500'  },
+  'Planned':     { badge: 'bg-indigo-50 text-indigo-700', dot: 'bg-indigo-500' },
 };
 
-const EMPTY_FORM = {
-  title: '',
-  description: '',
-  category: 'General',
-  status: 'Completed'
-};
+const EMPTY_FORM = { title: '', description: '', category: 'General', status: 'Completed' };
 
 const ResolutionsPanel = ({ resolutions = [], onRefresh }) => {
-  const [isOpen, setIsOpen]     = useState(false);
-  const [isAdding, setIsAdding] = useState(false);
-  const [formData, setFormData] = useState(EMPTY_FORM);
+  const [isOpen,     setIsOpen]     = useState(false);
+  const [isAdding,   setIsAdding]   = useState(false);
+  const [formData,   setFormData]   = useState(EMPTY_FORM);
   const [submitting, setSubmitting] = useState(false);
 
-  const handleChange = (e) =>
-    setFormData({ ...formData, [e.target.name]: e.target.value });
-
-  const handleCancel = () => { setIsAdding(false); setFormData(EMPTY_FORM); };
+  const handleChange  = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
+  const handleCancel  = () => { setIsAdding(false); setFormData(EMPTY_FORM); };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -42,66 +35,20 @@ const ResolutionsPanel = ({ resolutions = [], onRefresh }) => {
     }
   };
 
-  const inputStyle = {
-    width: '100%',
-    padding: '9px 14px',
-    borderRadius: '10px',
-    border: '1px solid #e0e0f0',
-    fontSize: '13px',
-    color: '#1e1b4b',
-    background: '#fff',
-    outline: 'none',
-    boxSizing: 'border-box',
-    fontFamily: 'inherit',
-    transition: 'border-color 0.2s'
-  };
-
-  const labelStyle = {
-    fontSize: '12px',
-    fontWeight: 600,
-    color: '#4b5563',
-    marginBottom: '6px',
-    display: 'block'
-  };
-
   return (
-    <div style={{
-      background: '#fff',
-      borderRadius: '16px',
-      border: '1px solid #f0f0f5',
-      boxShadow: '0 1px 4px rgba(0,0,0,0.04)',
-      overflow: 'hidden'
-    }}>
+    <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
 
-      {/* Header - green gradient */}
-      <div style={{
-        background: 'linear-gradient(135deg, #059669 0%, #10b981 100%)',
-        padding: '18px 22px',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        position: 'relative',
-        overflow: 'hidden'
-      }}>
-        <div style={{
-          position: 'absolute', top: '-15px', right: '-15px',
-          width: '80px', height: '80px', borderRadius: '50%',
-          background: 'rgba(255,255,255,0.1)', pointerEvents: 'none'
-        }} />
+      {/* Header */}
+      <div className="relative overflow-hidden bg-gradient-to-r from-emerald-600 to-emerald-500 px-5 py-4 flex items-center justify-between">
+        <div className="absolute -top-4 -right-4 w-20 h-20 rounded-full bg-white/10 pointer-events-none" />
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', position: 'relative' }}>
-          <div style={{
-            width: '32px', height: '32px', borderRadius: '9px',
-            background: 'rgba(255,255,255,0.2)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center'
-          }}>
-            <CheckCircle size={15} color="#fff" />
+        <div className="relative flex items-center gap-3">
+          <div className="w-8 h-8 rounded-xl bg-white/20 flex items-center justify-center">
+            <CheckCircle className="w-4 h-4 text-white" />
           </div>
           <div>
-            <h2 style={{ fontSize: '14px', fontWeight: 700, color: '#fff', margin: 0 }}>
-              Resolved Issues
-            </h2>
-            <p style={{ fontSize: '11px', color: 'rgba(255,255,255,0.7)', margin: 0 }}>
+            <h2 className="text-sm font-bold text-white leading-none mb-0.5">Resolved Issues</h2>
+            <p className="text-xs text-white/70">
               {resolutions.length} resolution{resolutions.length !== 1 ? 's' : ''} documented
             </p>
           </div>
@@ -109,13 +56,7 @@ const ResolutionsPanel = ({ resolutions = [], onRefresh }) => {
 
         <button
           onClick={() => setIsOpen(!isOpen)}
-          style={{
-            fontSize: '12px', fontWeight: 600,
-            background: 'rgba(255,255,255,0.2)',
-            color: '#fff', border: 'none',
-            padding: '5px 14px', borderRadius: '20px',
-            cursor: 'pointer', position: 'relative'
-          }}
+          className="relative text-xs font-semibold text-white bg-white/20 hover:bg-white/30 px-4 py-1.5 rounded-full transition-colors border-none cursor-pointer"
         >
           {isOpen ? 'Hide' : 'View All'}
         </button>
@@ -123,31 +64,12 @@ const ResolutionsPanel = ({ resolutions = [], onRefresh }) => {
 
       {/* Add button */}
       {!isAdding && (
-        <div style={{ padding: '16px 22px' }}>
+        <div className="px-5 py-4">
           <button
             onClick={() => setIsAdding(true)}
-            style={{
-              width: '100%',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
-              padding: '12px',
-              borderRadius: '12px',
-              border: '2px dashed #c7d2fe',
-              background: '#fafafa',
-              color: '#6366f1',
-              fontSize: '13px', fontWeight: 600,
-              cursor: 'pointer',
-              transition: 'all 0.2s ease'
-            }}
-            onMouseEnter={e => {
-              e.currentTarget.style.background = '#eef2ff';
-              e.currentTarget.style.borderColor = '#6366f1';
-            }}
-            onMouseLeave={e => {
-              e.currentTarget.style.background = '#fafafa';
-              e.currentTarget.style.borderColor = '#c7d2fe';
-            }}
+            className="w-full flex items-center justify-center gap-2 py-3 rounded-xl border-2 border-dashed border-indigo-200 bg-slate-50 hover:bg-indigo-50 hover:border-indigo-400 text-indigo-500 hover:text-indigo-600 text-sm font-semibold transition-all cursor-pointer"
           >
-            <Plus size={15} />
+            <Plus className="w-4 h-4" />
             Add New Resolution
           </button>
         </div>
@@ -155,37 +77,26 @@ const ResolutionsPanel = ({ resolutions = [], onRefresh }) => {
 
       {/* Add form */}
       {isAdding && (
-        <div style={{
-          padding: '20px 22px',
-          background: '#fafbff',
-          borderTop: '1px solid #f0f0f5'
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Sparkles size={14} color="#6366f1" />
-              <h3 style={{ fontSize: '14px', fontWeight: 700, color: '#1e1b4b', margin: 0 }}>
-                New Resolution
-              </h3>
+        <div className="px-5 py-4 bg-slate-50 border-t border-slate-100">
+
+          {/* Form header */}
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-indigo-500" />
+              <h3 className="text-sm font-bold text-slate-800">New Resolution</h3>
             </div>
             <button
               onClick={handleCancel}
-              style={{
-                width: '26px', height: '26px',
-                borderRadius: '8px',
-                border: '1px solid #e0e0f0',
-                background: '#fff',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                cursor: 'pointer', color: '#9ca3af'
-              }}
+              className="w-7 h-7 rounded-lg border border-slate-200 bg-white flex items-center justify-center text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
             >
-              <X size={13} />
+              <X className="w-3.5 h-3.5" />
             </button>
           </div>
 
-          <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+          <form onSubmit={handleSubmit} className="flex flex-col gap-3">
 
             <div>
-              <label style={labelStyle}>Resolution Title</label>
+              <label className="block text-xs font-semibold text-slate-600 mb-1.5">Resolution Title</label>
               <input
                 type="text"
                 name="title"
@@ -193,14 +104,12 @@ const ResolutionsPanel = ({ resolutions = [], onRefresh }) => {
                 onChange={handleChange}
                 placeholder="e.g., Fixed WiFi issues in Library"
                 required
-                style={inputStyle}
-                onFocus={e => e.target.style.borderColor = '#6366f1'}
-                onBlur={e => e.target.style.borderColor = '#e0e0f0'}
+                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white text-sm outline-none focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 transition-all"
               />
             </div>
 
             <div>
-              <label style={labelStyle}>Description</label>
+              <label className="block text-xs font-semibold text-slate-600 mb-1.5">Description</label>
               <textarea
                 name="description"
                 value={formData.description}
@@ -208,37 +117,31 @@ const ResolutionsPanel = ({ resolutions = [], onRefresh }) => {
                 placeholder="Describe what was resolved and how it addresses student feedback..."
                 rows={3}
                 required
-                style={{ ...inputStyle, resize: 'none', lineHeight: '1.5' }}
-                onFocus={e => e.target.style.borderColor = '#6366f1'}
-                onBlur={e => e.target.style.borderColor = '#e0e0f0'}
+                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white text-sm outline-none focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 transition-all resize-none"
               />
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+            <div className="grid grid-cols-2 gap-3">
               <div>
-                <label style={labelStyle}>Category</label>
+                <label className="block text-xs font-semibold text-slate-600 mb-1.5">Category</label>
                 <select
                   name="category"
                   value={formData.category}
                   onChange={handleChange}
-                  style={inputStyle}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white text-sm outline-none focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 transition-all"
                 >
-                  <option value="General">General</option>
-                  <option value="Infrastructure">Infrastructure</option>
-                  <option value="Academics">Academics</option>
-                  <option value="Services">Services</option>
-                  <option value="Facilities">Facilities</option>
-                  <option value="Technology">Technology</option>
-                  <option value="Other">Other</option>
+                  {['General','Infrastructure','Academics','Services','Facilities','Technology','Other'].map(c => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
                 </select>
               </div>
               <div>
-                <label style={labelStyle}>Status</label>
+                <label className="block text-xs font-semibold text-slate-600 mb-1.5">Status</label>
                 <select
                   name="status"
                   value={formData.status}
                   onChange={handleChange}
-                  style={inputStyle}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white text-sm outline-none focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 transition-all"
                 >
                   <option value="Completed">Completed</option>
                   <option value="In Progress">In Progress</option>
@@ -247,52 +150,29 @@ const ResolutionsPanel = ({ resolutions = [], onRefresh }) => {
               </div>
             </div>
 
-            <div style={{ display: 'flex', gap: '10px' }}>
+            <div className="flex gap-2 pt-1">
               <button
                 type="submit"
                 disabled={submitting}
-                style={{
-                  flex: 1,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '7px',
-                  padding: '10px',
-                  borderRadius: '10px',
-                  border: 'none',
-                  background: submitting
-                    ? '#a5b4fc'
-                    : 'linear-gradient(135deg, #4f46e5, #6366f1)',
-                  color: '#fff',
-                  fontSize: '13px', fontWeight: 700,
-                  cursor: submitting ? 'not-allowed' : 'pointer',
-                  transition: 'opacity 0.2s'
-                }}
+                className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold text-white transition-all
+                  ${submitting
+                    ? 'bg-indigo-300 cursor-not-allowed'
+                    : 'bg-gradient-to-r from-indigo-600 to-indigo-500 hover:-translate-y-0.5 hover:shadow-md hover:shadow-indigo-200 cursor-pointer'
+                  }`}
               >
                 {submitting ? (
                   <>
-                    <div style={{
-                      width: '13px', height: '13px',
-                      border: '2px solid rgba(255,255,255,0.4)',
-                      borderTopColor: '#fff',
-                      borderRadius: '50%',
-                      animation: 'spin 0.8s linear infinite'
-                    }} />
+                    <div className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
                     Saving...
                   </>
                 ) : (
-                  <><Send size={13} /> Save Resolution</>
+                  <><Send className="w-3.5 h-3.5" /> Save Resolution</>
                 )}
               </button>
               <button
                 type="button"
                 onClick={handleCancel}
-                style={{
-                  padding: '10px 18px',
-                  borderRadius: '10px',
-                  border: '1px solid #e0e0f0',
-                  background: '#fff',
-                  color: '#6b7280',
-                  fontSize: '13px', fontWeight: 600,
-                  cursor: 'pointer'
-                }}
+                className="px-4 py-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-100 text-slate-600 text-sm font-semibold transition-colors cursor-pointer"
               >
                 Cancel
               </button>
@@ -303,54 +183,30 @@ const ResolutionsPanel = ({ resolutions = [], onRefresh }) => {
 
       {/* Resolutions list */}
       {isOpen && (
-        <div style={{ borderTop: '1px solid #f0f0f5' }}>
+        <div className="border-t border-slate-100">
           {resolutions.length > 0 ? (
-            <div style={{ maxHeight: '380px', overflowY: 'auto' }}>
+            <div className="max-h-96 overflow-y-auto divide-y divide-slate-50">
               {resolutions.map((res, i) => {
                 const s = STATUS_STYLES[res.status] || STATUS_STYLES['Planned'];
                 return (
-                  <div
-                    key={i}
-                    style={{
-                      padding: '16px 22px',
-                      borderBottom: i < resolutions.length - 1 ? '1px solid #f8f8fc' : 'none',
-                      transition: 'background 0.15s'
-                    }}
-                    onMouseEnter={e => e.currentTarget.style.background = '#fafafa'}
-                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-                  >
-                    {/* Top row */}
-                    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '6px', gap: '10px' }}>
-                      <h4 style={{ fontSize: '13px', fontWeight: 700, color: '#1e1b4b', margin: 0 }}>
-                        {res.title}
-                      </h4>
-                      <span style={{
-                        fontSize: '10px', fontWeight: 700,
-                        background: s.bg, color: s.text,
-                        padding: '3px 9px', borderRadius: '20px',
-                        whiteSpace: 'nowrap', flexShrink: 0,
-                        display: 'flex', alignItems: 'center', gap: '4px'
-                      }}>
-                        <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: s.dot }} />
+                  <div key={i} className="px-5 py-4 hover:bg-slate-50 transition-colors">
+                    <div className="flex items-start justify-between gap-3 mb-2">
+                      <h4 className="text-sm font-bold text-slate-800">{res.title}</h4>
+                      <span className={`flex items-center gap-1.5 text-xs font-bold px-2.5 py-1 rounded-full whitespace-nowrap flex-shrink-0 ${s.badge}`}>
+                        <span className={`w-1.5 h-1.5 rounded-full ${s.dot}`} />
                         {res.status}
                       </span>
                     </div>
 
-                    <p style={{ fontSize: '12px', color: '#6b7280', margin: '0 0 10px', lineHeight: '1.55' }}>
-                      {res.description}
-                    </p>
+                    <p className="text-xs text-slate-500 mb-3 leading-relaxed">{res.description}</p>
 
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                      <span style={{
-                        fontSize: '11px', fontWeight: 600,
-                        background: '#eef2ff', color: '#4338ca',
-                        padding: '2px 9px', borderRadius: '20px'
-                      }}>
+                    <div className="flex items-center gap-3">
+                      <span className="text-xs font-semibold text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-full">
                         {res.category}
                       </span>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        <Clock size={10} color="#9ca3af" />
-                        <span style={{ fontSize: '11px', color: '#9ca3af' }}>
+                      <div className="flex items-center gap-1">
+                        <Clock className="w-3 h-3 text-slate-400" />
+                        <span className="text-xs text-slate-400">
                           {res.createdAt
                             ? new Date(res.createdAt).toLocaleDateString([], { month: 'short', day: 'numeric' })
                             : 'Recently'}
@@ -362,34 +218,18 @@ const ResolutionsPanel = ({ resolutions = [], onRefresh }) => {
               })}
             </div>
           ) : (
-            <div style={{
-              padding: '40px 24px', textAlign: 'center',
-              display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px'
-            }}>
-              <div style={{
-                width: '52px', height: '52px', borderRadius: '50%',
-                background: '#f0fdf4',
-                display: 'flex', alignItems: 'center', justifyContent: 'center'
-              }}>
-                <CheckCircle size={22} color="#22c55e" />
+            <div className="flex flex-col items-center justify-center py-12 gap-3 text-center">
+              <div className="w-12 h-12 rounded-full bg-green-50 flex items-center justify-center">
+                <CheckCircle className="w-6 h-6 text-green-500" />
               </div>
-              <p style={{ fontSize: '14px', fontWeight: 600, color: '#374151', margin: 0 }}>
-                No resolutions yet
-              </p>
-              <p style={{ fontSize: '12px', color: '#9ca3af', margin: 0 }}>
+              <p className="text-sm font-semibold text-slate-700">No resolutions yet</p>
+              <p className="text-xs text-slate-400 max-w-xs">
                 Add resolutions to show students their feedback is being addressed.
               </p>
             </div>
           )}
         </div>
       )}
-
-      <style>{`
-        @keyframes spin {
-          from { transform: rotate(0deg); }
-          to { transform: rotate(360deg); }
-        }
-      `}</style>
     </div>
   );
 };

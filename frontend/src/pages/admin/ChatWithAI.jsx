@@ -14,17 +14,16 @@ const suggestedQuestions = [
 const WELCOME_MESSAGE = {
   id: 0,
   role: 'assistant',
-  text: 'Hello! I\'m your AI assistant. I can only answer questions related to student feedback.\n\nFor example:\n• "What are the main complaints this month?"\n• "Show me feedback about facilities"\n• "How many pending feedbacks are there?"\n• "What should I prioritize?"\n\nHow can I help you today?',
+  text: "Hello! I'm your AI assistant. I can only answer questions related to student feedback.\n\nFor example:\n• \"What are the main complaints this month?\"\n• \"Show me feedback about facilities\"\n• \"How many pending feedbacks are there?\"\n• \"What should I prioritize?\"\n\nHow can I help you today?",
   timestamp: new Date()
 };
 
 const ChatWithAI = () => {
   const [messages, setMessages] = useState([WELCOME_MESSAGE]);
-  const [input, setInput] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [dark, setDark] = useState(false);
+  const [input,    setInput]    = useState('');
+  const [loading,  setLoading]  = useState(false);
+  const [dark,     setDark]     = useState(false);
   const messagesEndRef = useRef(null);
-  const textareaRef = useRef(null);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -33,9 +32,7 @@ const ChatWithAI = () => {
   const addMessage = (role, text, sources = null) => {
     setMessages(prev => [...prev, {
       id: Date.now() + Math.random(),
-      role,
-      text,
-      sources,
+      role, text, sources,
       timestamp: new Date()
     }]);
   };
@@ -51,8 +48,7 @@ const ChatWithAI = () => {
       const data = response.data;
       addMessage('assistant', data.answer || 'I could not find an answer. Please try again.', data.sources || null);
     } catch (err) {
-      const backendMessage = err.response?.data?.message || 'Something went wrong. Make sure Ollama is running.';
-      addMessage('assistant', backendMessage);
+      addMessage('assistant', err.response?.data?.message || 'Something went wrong. Make sure Ollama is running.');
     } finally {
       setLoading(false);
     }
@@ -70,158 +66,70 @@ const ChatWithAI = () => {
     setInput('');
   };
 
-  // Theme tokens
-  const t = {
-    bg:          dark ? '#0f1117' : '#f5f5f7',
-    surface:     dark ? '#1a1d27' : '#ffffff',
-    surfaceAlt:  dark ? '#22263a' : '#f0f0f5',
-    border:      dark ? '#2e3250' : '#e4e4e9',
-    text:        dark ? '#e8eaf0' : '#1a1a2e',
-    textMuted:   dark ? '#7a7f9a' : '#8888a0',
-    accent:      dark ? '#7c6af7' : '#5b4fcf',
-    accentSoft:  dark ? '#2a2550' : '#ede9ff',
-    accentText:  dark ? '#b0a8ff' : '#5b4fcf',
-    userBubble:  dark ? '#3d3580' : '#5b4fcf',
-    userText:    '#ffffff',
-    aiBubble:    dark ? '#22263a' : '#f0f0f5',
-    aiText:      dark ? '#e8eaf0' : '#1a1a2e',
-    inputBg:     dark ? '#22263a' : '#f7f7fa',
-    inputBorder: dark ? '#3a3f5c' : '#dddde8',
-    tagBg:       dark ? '#2a2550' : '#ede9ff',
-    tagText:     dark ? '#b0a8ff' : '#5b4fcf',
-    sourceBg:    dark ? '#1e2235' : '#faf9ff',
-    sourceBorder:dark ? '#35396e' : '#ddd8ff',
-  };
-
   return (
-    <div style={{
-      display: 'flex',
-      flexDirection: 'column',
-      height: 'calc(100vh - 6rem)',
-      background: t.bg,
-      borderRadius: '16px',
-      overflow: 'hidden',
-      fontFamily: "'DM Sans', 'Segoe UI', sans-serif",
-      transition: 'background 0.3s ease'
-    }}>
+    <div className={`flex flex-col rounded-2xl overflow-hidden transition-colors duration-300 ${dark ? 'bg-slate-900' : 'bg-gray-50'}`}
+      style={{ height: 'calc(100vh - 6rem)' }}
+    >
 
       {/* Header */}
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        padding: '18px 24px',
-        borderBottom: `1px solid ${t.border}`,
-        background: t.surface,
-        transition: 'background 0.3s ease, border-color 0.3s ease'
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <div style={{
-            width: '38px', height: '38px',
-            borderRadius: '12px',
-            background: t.accentSoft,
-            display: 'flex', alignItems: 'center', justifyContent: 'center'
-          }}>
-            <Sparkles size={18} color={t.accentText} />
+      <div className={`flex items-center justify-between px-6 py-4 border-b transition-colors duration-300
+        ${dark ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-100'}`}>
+
+        <div className="flex items-center gap-3">
+          <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${dark ? 'bg-indigo-900' : 'bg-indigo-50'}`}>
+            <Sparkles className={`w-4.5 h-4.5 ${dark ? 'text-indigo-300' : 'text-indigo-600'}`} size={18} />
           </div>
           <div>
-            <h2 style={{ margin: 0, fontSize: '16px', fontWeight: 700, color: t.text, letterSpacing: '-0.3px' }}>
+            <h2 className={`text-sm font-bold leading-none mb-1 ${dark ? 'text-slate-100' : 'text-slate-800'}`}>
               AI Feedback Assistant
             </h2>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '5px', marginTop: '2px' }}>
-              <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#22c55e' }} />
-              <span style={{ fontSize: '11px', color: t.textMuted }}>Powered by Ollama · phi3</span>
+            <div className="flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
+              <span className={`text-xs ${dark ? 'text-slate-400' : 'text-slate-400'}`}>Powered by Ollama · phi3</span>
             </div>
           </div>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          {/* Dark mode toggle */}
+        <div className="flex items-center gap-2">
           <button
             onClick={() => setDark(!dark)}
-            title={dark ? 'Switch to light mode' : 'Switch to dark mode'}
-            style={{
-              display: 'flex', alignItems: 'center', gap: '6px',
-              padding: '7px 14px',
-              borderRadius: '20px',
-              border: `1px solid ${t.border}`,
-              background: t.surfaceAlt,
-              color: t.textMuted,
-              cursor: 'pointer',
-              fontSize: '12px',
-              fontWeight: 500,
-              transition: 'all 0.2s ease'
-            }}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-colors cursor-pointer
+              ${dark ? 'bg-slate-700 border-slate-600 text-slate-300 hover:bg-slate-600' : 'bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100'}`}
           >
-            {dark ? <Sun size={13} /> : <Moon size={13} />}
+            {dark ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
             {dark ? 'Light' : 'Dark'}
           </button>
-
-          {/* New chat */}
           <button
             onClick={handleReset}
-            style={{
-              display: 'flex', alignItems: 'center', gap: '6px',
-              padding: '7px 14px',
-              borderRadius: '20px',
-              border: `1px solid ${t.border}`,
-              background: t.surfaceAlt,
-              color: t.textMuted,
-              cursor: 'pointer',
-              fontSize: '12px',
-              fontWeight: 500,
-              transition: 'all 0.2s ease'
-            }}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-colors cursor-pointer
+              ${dark ? 'bg-slate-700 border-slate-600 text-slate-300 hover:bg-slate-600' : 'bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100'}`}
           >
-            <RefreshCw size={13} />
+            <RefreshCw className="w-3.5 h-3.5" />
             New chat
           </button>
         </div>
       </div>
 
       {/* Messages */}
-      <div style={{
-        flex: 1,
-        overflowY: 'auto',
-        padding: '24px',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '20px',
-        background: t.bg,
-        transition: 'background 0.3s ease'
-      }}>
+      <div className={`flex-1 overflow-y-auto p-6 flex flex-col gap-5 transition-colors duration-300
+        ${dark ? 'bg-slate-900' : 'bg-gray-50'}`}>
 
-        {/* Suggested questions - only at start */}
+        {/* Suggested questions */}
         {messages.length <= 1 && (
-          <div style={{
-            background: t.surface,
-            border: `1px solid ${t.border}`,
-            borderRadius: '16px',
-            padding: '20px',
-            transition: 'all 0.3s ease'
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px' }}>
-              <Zap size={14} color={t.accentText} />
-              <span style={{ fontSize: '12px', fontWeight: 600, color: t.textMuted, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+          <div className={`rounded-2xl p-5 border transition-colors ${dark ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-100'}`}>
+            <div className="flex items-center gap-2 mb-3">
+              <Zap className={`w-3.5 h-3.5 ${dark ? 'text-indigo-400' : 'text-indigo-500'}`} />
+              <span className={`text-xs font-semibold uppercase tracking-wider ${dark ? 'text-slate-400' : 'text-slate-400'}`}>
                 Quick questions
               </span>
             </div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+            <div className="flex flex-wrap gap-2">
               {suggestedQuestions.map((q, i) => (
                 <button
                   key={i}
                   onClick={() => setInput(q)}
-                  style={{
-                    padding: '7px 14px',
-                    borderRadius: '20px',
-                    border: `1px solid ${t.border}`,
-                    background: t.tagBg,
-                    color: t.tagText,
-                    fontSize: '12px',
-                    fontWeight: 500,
-                    cursor: 'pointer',
-                    transition: 'all 0.2s ease'
-                  }}
+                  className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors cursor-pointer
+                    ${dark ? 'bg-indigo-900/50 border-indigo-700 text-indigo-300 hover:bg-indigo-800' : 'bg-indigo-50 border-indigo-100 text-indigo-600 hover:bg-indigo-100'}`}
                 >
                   {q}
                 </button>
@@ -230,78 +138,52 @@ const ChatWithAI = () => {
           </div>
         )}
 
-        {/* Message bubbles */}
+        {/* Messages */}
         {messages.map((message) => (
-          <div key={message.id} style={{
-            display: 'flex',
-            flexDirection: message.role === 'user' ? 'row-reverse' : 'row',
-            gap: '12px',
-            alignItems: 'flex-start'
-          }}>
-
+          <div key={message.id}
+            className={`flex gap-3 items-start ${message.role === 'user' ? 'flex-row-reverse' : ''}`}
+          >
             {/* Avatar */}
-            <div style={{
-              width: '34px', height: '34px',
-              borderRadius: '10px',
-              background: message.role === 'assistant' ? t.accentSoft : t.userBubble,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              flexShrink: 0
-            }}>
+            <div className={`w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0
+              ${message.role === 'assistant'
+                ? dark ? 'bg-indigo-900' : 'bg-indigo-50'
+                : 'bg-indigo-600'
+              }`}>
               {message.role === 'assistant'
-                ? <Bot size={16} color={t.accentText} />
-                : <User size={16} color="#fff" />
+                ? <Bot className={`w-4 h-4 ${dark ? 'text-indigo-300' : 'text-indigo-600'}`} />
+                : <User className="w-4 h-4 text-white" />
               }
             </div>
 
-            {/* Bubble + sources */}
-            <div style={{
-              maxWidth: '72%',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '8px',
-              alignItems: message.role === 'user' ? 'flex-end' : 'flex-start'
-            }}>
-              <div style={{
-                padding: '12px 16px',
-                borderRadius: message.role === 'user' ? '18px 4px 18px 18px' : '4px 18px 18px 18px',
-                background: message.role === 'user' ? t.userBubble : t.aiBubble,
-                color: message.role === 'user' ? t.userText : t.aiText,
-                fontSize: '14px',
-                lineHeight: '1.6',
-                whiteSpace: 'pre-wrap',
-                boxShadow: dark ? 'none' : '0 1px 3px rgba(0,0,0,0.06)',
-                transition: 'background 0.3s ease'
-              }}>
+            {/* Bubble */}
+            <div className={`max-w-[72%] flex flex-col gap-2 ${message.role === 'user' ? 'items-end' : 'items-start'}`}>
+              <div className={`px-4 py-3 text-sm leading-relaxed whitespace-pre-wrap shadow-sm
+                ${message.role === 'user'
+                  ? 'bg-indigo-600 text-white rounded-[18px_4px_18px_18px]'
+                  : dark
+                    ? 'bg-slate-800 text-slate-100 rounded-[4px_18px_18px_18px]'
+                    : 'bg-white text-slate-800 rounded-[4px_18px_18px_18px]'
+                }`}>
                 {message.text}
               </div>
 
-              {/* Sources panel */}
+              {/* Sources */}
               {message.sources && message.sources.length > 0 && (
-                <div style={{
-                  background: t.sourceBg,
-                  border: `1px solid ${t.sourceBorder}`,
-                  borderRadius: '12px',
-                  padding: '12px 16px',
-                  width: '100%',
-                  transition: 'all 0.3s ease'
-                }}>
-                  <p style={{ margin: '0 0 8px', fontSize: '11px', fontWeight: 600, color: t.accentText, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                <div className={`rounded-xl px-4 py-3 w-full border
+                  ${dark ? 'bg-slate-800/80 border-indigo-900' : 'bg-indigo-50/80 border-indigo-100'}`}>
+                  <p className={`text-xs font-bold uppercase tracking-wider mb-2 ${dark ? 'text-indigo-400' : 'text-indigo-500'}`}>
                     Based on {message.sources.length} feedback entries
                   </p>
                   {message.sources.map((source, i) => (
-                    <div key={i} style={{
-                      display: 'flex', gap: '8px',
-                      padding: '4px 0',
-                      borderTop: i > 0 ? `1px solid ${t.border}` : 'none'
-                    }}>
-                      <span style={{ fontSize: '11px', fontWeight: 700, color: t.accentText, flexShrink: 0 }}>{i + 1}.</span>
-                      <span style={{ fontSize: '12px', color: t.textMuted, lineHeight: '1.5' }}>{source}</span>
+                    <div key={i} className={`flex gap-2 py-1 ${i > 0 ? `border-t ${dark ? 'border-slate-700' : 'border-indigo-100'}` : ''}`}>
+                      <span className={`text-xs font-bold flex-shrink-0 ${dark ? 'text-indigo-400' : 'text-indigo-500'}`}>{i + 1}.</span>
+                      <span className={`text-xs leading-relaxed ${dark ? 'text-slate-400' : 'text-slate-500'}`}>{source}</span>
                     </div>
                   ))}
                 </div>
               )}
 
-              <span style={{ fontSize: '10px', color: t.textMuted, paddingLeft: '4px' }}>
+              <span className={`text-xs px-1 ${dark ? 'text-slate-500' : 'text-slate-400'}`}>
                 {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
               </span>
             </div>
@@ -310,35 +192,18 @@ const ChatWithAI = () => {
 
         {/* Typing indicator */}
         {loading && (
-          <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
-            <div style={{
-              width: '34px', height: '34px',
-              borderRadius: '10px',
-              background: t.accentSoft,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              flexShrink: 0
-            }}>
-              <Bot size={16} color={t.accentText} />
+          <div className="flex gap-3 items-start">
+            <div className={`w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 ${dark ? 'bg-indigo-900' : 'bg-indigo-50'}`}>
+              <Bot className={`w-4 h-4 ${dark ? 'text-indigo-300' : 'text-indigo-600'}`} />
             </div>
-            <div style={{
-              padding: '14px 18px',
-              borderRadius: '4px 18px 18px 18px',
-              background: t.aiBubble,
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '6px'
-            }}>
-              <span style={{ fontSize: '11px', color: t.textMuted }}>Analyzing feedback...</span>
-              <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+            <div className={`px-4 py-3 rounded-[4px_18px_18px_18px] flex flex-col gap-1.5 ${dark ? 'bg-slate-800' : 'bg-white'}`}>
+              <span className={`text-xs ${dark ? 'text-slate-400' : 'text-slate-400'}`}>Analyzing feedback...</span>
+              <div className="flex gap-1 items-center">
                 {[0, 1, 2].map(i => (
-                  <div key={i} style={{
-                    width: '7px', height: '7px',
-                    borderRadius: '50%',
-                    background: t.accentText,
-                    animation: 'bounce 1.2s infinite',
-                    animationDelay: `${i * 0.2}s`,
-                    opacity: 0.7
-                  }} />
+                  <div key={i}
+                    className={`w-1.5 h-1.5 rounded-full animate-bounce ${dark ? 'bg-indigo-400' : 'bg-indigo-500'}`}
+                    style={{ animationDelay: `${i * 0.15}s` }}
+                  />
                 ))}
               </div>
             </div>
@@ -348,73 +213,39 @@ const ChatWithAI = () => {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Input area */}
-      <div style={{
-        padding: '16px 24px 20px',
-        borderTop: `1px solid ${t.border}`,
-        background: t.surface,
-        transition: 'all 0.3s ease'
-      }}>
-        <div style={{
-          display: 'flex',
-          gap: '10px',
-          alignItems: 'flex-end',
-          background: t.inputBg,
-          border: `1px solid ${t.inputBorder}`,
-          borderRadius: '14px',
-          padding: '10px 10px 10px 16px',
-          transition: 'all 0.2s ease'
-        }}>
+      {/* Input */}
+      <div className={`px-6 pt-4 pb-5 border-t transition-colors duration-300
+        ${dark ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-100'}`}>
+        <div className={`flex gap-2.5 items-end rounded-2xl px-4 py-2.5 border transition-colors
+          ${dark ? 'bg-slate-700 border-slate-600' : 'bg-slate-50 border-slate-200'}`}>
           <textarea
-            ref={textareaRef}
             value={input}
-            onChange={(e) => setInput(e.target.value)}
+            onChange={e => setInput(e.target.value)}
             onKeyPress={handleKeyPress}
             placeholder="Ask about student feedback... (Enter to send)"
             rows={1}
             disabled={loading}
-            style={{
-              flex: 1,
-              border: 'none',
-              outline: 'none',
-              background: 'transparent',
-              color: t.text,
-              fontSize: '14px',
-              lineHeight: '1.5',
-              resize: 'none',
-              fontFamily: 'inherit',
-              opacity: loading ? 0.5 : 1
-            }}
+            className={`flex-1 bg-transparent border-none outline-none resize-none text-sm leading-relaxed font-inherit
+              ${dark ? 'text-slate-100 placeholder:text-slate-500' : 'text-slate-800 placeholder:text-slate-400'}
+              ${loading ? 'opacity-50' : ''}`}
           />
           <button
             onClick={handleSend}
             disabled={!input.trim() || loading}
-            style={{
-              width: '36px', height: '36px',
-              borderRadius: '10px',
-              border: 'none',
-              background: (!input.trim() || loading) ? t.border : t.accent,
-              color: (!input.trim() || loading) ? t.textMuted : '#fff',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              cursor: (!input.trim() || loading) ? 'not-allowed' : 'pointer',
-              flexShrink: 0,
-              transition: 'all 0.2s ease'
-            }}
+            className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 border-none transition-all cursor-pointer
+              ${!input.trim() || loading
+                ? dark ? 'bg-slate-600 text-slate-400 cursor-not-allowed' : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                : 'bg-indigo-600 text-white hover:-translate-y-0.5 hover:bg-indigo-500'
+              }`}
           >
-            <Send size={15} />
+            <Send className="w-4 h-4" />
           </button>
         </div>
-        <p style={{ margin: '8px 0 0', fontSize: '11px', color: t.textMuted, textAlign: 'center' }}>
+        <p className={`text-xs text-center mt-2 ${dark ? 'text-slate-500' : 'text-slate-400'}`}>
           Only answers questions related to student feedback
         </p>
       </div>
 
-      <style>{`
-        @keyframes bounce {
-          0%, 60%, 100% { transform: translateY(0); }
-          30% { transform: translateY(-5px); }
-        }
-      `}</style>
     </div>
   );
 };

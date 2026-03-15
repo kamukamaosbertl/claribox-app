@@ -2,7 +2,6 @@ import { Link } from 'react-router-dom';
 import { RefreshCw, Sparkles, Bot } from 'lucide-react';
 
 const DashboardHeader = ({ lastUpdated, onRefresh, loading, admin }) => {
-
   const greeting = () => {
     const hour = new Date().getHours();
     if (hour < 12) return 'Good morning';
@@ -20,61 +19,34 @@ const DashboardHeader = ({ lastUpdated, onRefresh, loading, admin }) => {
   });
 
   return (
-    <div style={{
-      display: 'flex',
-      flexDirection: 'column',
-      gap: '16px',
-      paddingBottom: '24px',
-      borderBottom: '1px solid #f0f0f5',
-      marginBottom: '8px'
-    }}>
-      <div style={{
-        display: 'flex',
-        alignItems: 'flex-start',
-        justifyContent: 'space-between',
-        gap: '16px',
-        flexWrap: 'wrap'
-      }}>
-
-        {/* Left - Title + greeting */}
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
-            <h1 style={{
-              fontSize: '26px',
-              fontWeight: 800,
-              color: '#0f172a',
-              margin: 0,
-              letterSpacing: '-0.5px',
-              lineHeight: 1.2
-            }}>
-              {greeting()}, {admin?.name?.split(' ')[0] || 'Admin'} 👋
+    <div className="flex flex-col gap-6 pb-8 border-b border-slate-200/60 backdrop-blur-sm bg-white/60 rounded-3xl p-8 -mx-6 lg:-mx-8 mb-8 shadow-xl shadow-slate-100/50 hover:shadow-2xl transition-all duration-500">
+      
+      {/* Main Header Row */}
+      <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-6 lg:gap-8">
+        
+        {/* Left: Greeting + Date */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-3 mb-2">
+            <h1 className="text-4xl lg:text-5xl font-black bg-gradient-to-r from-slate-900 via-indigo-900 to-slate-900 bg-clip-text text-transparent drop-shadow-2xl leading-tight tracking-tight">
+              {greeting()}, {admin?.name?.split(' ')[0] || 'Admin'}
             </h1>
+            <span className="text-2xl">👋</span>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <p style={{ fontSize: '13px', color: '#94a3b8', margin: 0 }}>
+          
+          <div className="flex flex-wrap items-center gap-3 text-sm">
+            <p className="text-slate-500 font-medium tracking-wide capitalize">
               {today}
             </p>
+            
             {lastUpdated && (
               <>
-                <span style={{ color: '#e2e8f0' }}>·</span>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                  <div style={{ position: 'relative', width: '7px', height: '7px' }}>
-                    <span style={{
-                      position: 'absolute',
-                      inset: 0,
-                      borderRadius: '50%',
-                      background: '#22c55e',
-                      opacity: 0.4,
-                      animation: 'ping 1.5s cubic-bezier(0,0,0.2,1) infinite'
-                    }} />
-                    <span style={{
-                      position: 'absolute',
-                      inset: '1px',
-                      borderRadius: '50%',
-                      background: '#22c55e'
-                    }} />
+                <span className="text-slate-300 mx-1">·</span>
+                <div className="flex items-center gap-2 bg-slate-100/60 backdrop-blur-sm px-3 py-1.5 rounded-full border border-slate-200/50 shadow-sm">
+                  <div className="relative w-2 h-2">
+                    <span className="absolute inset-0 w-2 h-2 bg-emerald-500 rounded-full opacity-60 animate-ping" />
+                    <span className="absolute inset-0 w-2 h-2 bg-emerald-500 rounded-full ring-2 ring-emerald-500/30" />
                   </div>
-                  <span style={{ fontSize: '12px', color: '#94a3b8' }}>
+                  <span className="text-xs text-slate-600 font-medium">
                     Updated {formatTime(lastUpdated)}
                   </span>
                 </div>
@@ -83,100 +55,55 @@ const DashboardHeader = ({ lastUpdated, onRefresh, loading, admin }) => {
           </div>
         </div>
 
-        {/* Right - Actions */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-
-          {/* Refresh button */}
+        {/* Right: Action Buttons */}
+        <div className="flex items-center gap-3 flex-shrink-0">
+          
+          {/* Enhanced Refresh Button */}
           <button
             onClick={onRefresh}
             disabled={loading}
             title="Refresh data"
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              width: '38px',
-              height: '38px',
-              borderRadius: '10px',
-              border: '1px solid #e2e8f0',
-              background: '#fff',
-              color: '#64748b',
-              cursor: loading ? 'not-allowed' : 'pointer',
-              opacity: loading ? 0.5 : 1,
-              transition: 'all 0.2s ease',
-              flexShrink: 0
-            }}
+            className="group relative p-3 rounded-2xl border-2 border-slate-200/60 bg-white/80 backdrop-blur-sm shadow-lg hover:shadow-xl hover:shadow-indigo-100/50 hover:border-indigo-300 hover:bg-indigo-50/80 active:scale-95 active:shadow-md transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:shadow-lg flex items-center justify-center w-12 h-12"
           >
             <RefreshCw
-              size={15}
-              style={{
-                animation: loading ? 'spin 1s linear infinite' : 'none'
-              }}
+              size={18}
+              className={`text-slate-600 group-hover:text-indigo-600 transition-colors duration-200 ${loading ? 'animate-spin' : ''}`}
             />
+            {loading && (
+              <div className="absolute inset-0 bg-indigo-500/10 rounded-2xl backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+            )}
           </button>
 
-          {/* Chat with AI button */}
+          {/* Premium AI Chat Button */}
           <Link
             to="/admin/chat"
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              padding: '9px 18px',
-              borderRadius: '10px',
-              background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)',
-              color: '#fff',
-              fontSize: '13px',
-              fontWeight: 600,
-              textDecoration: 'none',
-              boxShadow: '0 2px 8px rgba(99,102,241,0.35)',
-              transition: 'all 0.2s ease',
-              whiteSpace: 'nowrap'
-            }}
+            className="group relative flex items-center gap-2.5 px-6 py-3 rounded-2xl bg-gradient-to-r from-indigo-600 via-purple-600 to-indigo-700 text-white font-semibold text-sm shadow-2xl shadow-indigo-500/25 hover:shadow-3xl hover:shadow-indigo-500/40 hover:from-indigo-700 hover:via-purple-700 hover:to-indigo-800 active:scale-[0.97] active:shadow-xl transition-all duration-300 overflow-hidden transform-gpu ring-1 ring-indigo-500/30 backdrop-blur-sm"
           >
-            <Bot size={15} />
-            Ask AI
-            <Sparkles size={11} style={{ opacity: 0.8 }} />
+            <Bot size={16} className="group-hover:scale-110 transition-transform duration-200 drop-shadow-sm" />
+            <span>Ask AI</span>
+            <Sparkles 
+              size={14} 
+              className="ml-1 opacity-80 group-hover:opacity-100 group-hover:rotate-12 transition-all duration-300 drop-shadow-sm"
+            />
+            
+            {/* Shine effect */}
+            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -skew-x-12 -translate-x-full group-hover:translate-x-full transition-transform duration-700" />
           </Link>
-
         </div>
       </div>
 
-      {/* Bottom bar - admin info + subtitle */}
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        flexWrap: 'wrap',
-        gap: '8px'
-      }}>
-        <p style={{ fontSize: '13px', color: '#94a3b8', margin: 0 }}>
+      {/* Subtitle + Role Badge */}
+      <div className="flex flex-wrap items-center justify-between gap-4 pt-2">
+        <p className="text-slate-600 text-sm lg:text-base font-medium leading-relaxed max-w-2xl">
           Here's what's happening with student feedback across your institution.
         </p>
+        
         {admin?.role && (
-          <span style={{
-            fontSize: '11px',
-            fontWeight: 600,
-            color: '#6366f1',
-            background: '#eef2ff',
-            padding: '3px 10px',
-            borderRadius: '20px',
-            letterSpacing: '0.3px'
-          }}>
+          <span className="px-4 py-1.5 bg-gradient-to-r from-indigo-100 to-purple-100 text-indigo-800 text-xs font-bold uppercase tracking-wider rounded-full border border-indigo-200/50 shadow-sm hover:shadow-md hover:bg-indigo-200/80 transition-all duration-200">
             {admin.role}
           </span>
         )}
       </div>
-
-      <style>{`
-        @keyframes ping {
-          75%, 100% { transform: scale(2); opacity: 0; }
-        }
-        @keyframes spin {
-          from { transform: rotate(0deg); }
-          to { transform: rotate(360deg); }
-        }
-      `}</style>
     </div>
   );
 };

@@ -1,23 +1,13 @@
 import { MessageSquare, CheckCircle, ArrowRight, TrendingUp } from 'lucide-react';
 
 const StatsCards = ({ stats, type = 'all', onResolvedClick }) => {
-
   if (!stats) {
     return (
-      <div style={{
-        height: '140px',
-        borderRadius: '16px',
-        background: 'linear-gradient(135deg, #f8f8fc 0%, #eef2ff 100%)',
-        border: '2px dashed #c7d2fe',
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: '8px',
-        animation: 'pulse 2s infinite'
-      }}>
-        <MessageSquare size={20} color="#a5b4fc" />
-        <span style={{ fontSize: '12px', color: '#a5b4fc', fontWeight: 500 }}>Loading...</span>
+      <div className="h-[160px] bg-gradient-to-br from-slate-50/80 to-indigo-50/60 backdrop-blur-xl border-2 border-dashed border-indigo-200 rounded-3xl flex flex-col items-center justify-center gap-3 shadow-lg animate-pulse">
+        <div className="w-12 h-12 bg-indigo-100/50 rounded-2xl flex items-center justify-center backdrop-blur-sm">
+          <MessageSquare size={24} className="text-indigo-400" />
+        </div>
+        <span className="text-sm font-semibold text-indigo-500 tracking-wide">Loading stats...</span>
       </div>
     );
   }
@@ -35,92 +25,49 @@ const StatsCards = ({ stats, type = 'all', onResolvedClick }) => {
     return (
       <div
         onClick={onResolvedClick}
-        style={{
-          position: 'relative',
-          borderRadius: '16px',
-          padding: '20px',
-          background: 'linear-gradient(135deg, #059669 0%, #10b981 60%, #34d399 100%)',
-          boxShadow: '0 4px 20px rgba(16,185,129,0.3)',
-          cursor: 'pointer',
-          overflow: 'hidden',
-          transition: 'transform 0.2s ease, box-shadow 0.2s ease',
-          height: '100%'
-        }}
-        onMouseEnter={e => {
-          e.currentTarget.style.transform = 'translateY(-3px)';
-          e.currentTarget.style.boxShadow = '0 8px 28px rgba(16,185,129,0.4)';
-        }}
-        onMouseLeave={e => {
-          e.currentTarget.style.transform = 'translateY(0)';
-          e.currentTarget.style.boxShadow = '0 4px 20px rgba(16,185,129,0.3)';
-        }}
+        className="group relative bg-gradient-to-br from-emerald-500 via-emerald-600 to-teal-600 rounded-3xl p-8 shadow-2xl shadow-emerald-500/30 hover:shadow-3xl hover:shadow-emerald-500/50 hover:-translate-y-2 active:scale-[0.98] transition-all duration-500 cursor-pointer overflow-hidden h-full border border-white/20 backdrop-blur-xl hover:border-white/40"
       >
-        {/* Decorative circles */}
-        <div style={{
-          position: 'absolute', top: '-15px', right: '-15px',
-          width: '80px', height: '80px', borderRadius: '50%',
-          background: 'rgba(255,255,255,0.12)', pointerEvents: 'none'
-        }} />
-        <div style={{
-          position: 'absolute', bottom: '-20px', left: '20px',
-          width: '60px', height: '60px', borderRadius: '50%',
-          background: 'rgba(255,255,255,0.08)', pointerEvents: 'none'
-        }} />
+        {/* Premium decorative orbs */}
+        <div className="absolute top-0 -right-6 w-24 h-24 bg-white/15 rounded-full blur-xl animate-pulse" />
+        <div className="absolute bottom-0 left-6 w-20 h-20 bg-white/10 rounded-full blur-lg [animation:bounce_3s_ease-in-out_infinite]" />
+        
+        {/* Shine overlay */}
+        <div className="absolute inset-0 bg-gradient-to-r from-white/10 via-transparent to-white/5 -skew-x-12 -translate-x-[-120%] group-hover:translate-x-[120%] transition-transform duration-1000" />
 
-        <div style={{ position: 'relative', zIndex: 1 }}>
-          {/* Top row */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
-            <div>
-              <p style={{ fontSize: '11px', fontWeight: 700, color: 'rgba(255,255,255,0.75)', margin: '0 0 6px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+        <div className="relative z-10">
+          {/* Header */}
+          <div className="flex justify-between items-start mb-6 gap-4">
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-bold uppercase tracking-wider text-emerald-200/90 mb-2">
                 Resolved Issues
               </p>
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
-                <h3 style={{ fontSize: '32px', fontWeight: 800, color: '#fff', margin: 0, lineHeight: 1 }}>
+              <div className="flex items-baseline gap-3">
+                <h3 className="text-4xl lg:text-5xl font-black text-white drop-shadow-2xl leading-none">
                   {stats.resolved || 0}
                 </h3>
-                <span style={{
-                  fontSize: '11px', fontWeight: 700,
-                  background: 'rgba(255,255,255,0.25)',
-                  color: '#fff',
-                  padding: '2px 8px',
-                  borderRadius: '20px'
-                }}>
+                <span className="text-sm font-bold bg-white/25 backdrop-blur-sm text-white px-3 py-1 rounded-full shadow-lg">
                   {resolvedPercent}%
                 </span>
               </div>
             </div>
-            <div style={{
-              width: '42px', height: '42px',
-              borderRadius: '12px',
-              background: 'rgba(255,255,255,0.2)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center'
-            }}>
-              <CheckCircle size={20} color="#fff" />
+            <div className="w-14 h-14 bg-white/20 backdrop-blur-sm rounded-2xl flex items-center justify-center ring-1 ring-white/30 shadow-xl group-hover:scale-110 transition-all duration-300">
+              <CheckCircle size={24} className="text-white drop-shadow-lg" />
             </div>
           </div>
 
-          {/* Progress bar */}
-          <div>
-            <div style={{
-              height: '6px',
-              background: 'rgba(255,255,255,0.25)',
-              borderRadius: '6px',
-              overflow: 'hidden',
-              marginBottom: '6px'
-            }}>
-              <div style={{
-                height: '100%',
-                width: `${resolvedPercent}%`,
-                background: '#fff',
-                borderRadius: '6px',
-                transition: 'width 1s ease'
-              }} />
+          {/* Premium Progress Bar */}
+          <div className="space-y-3">
+            <div className="h-2 bg-white/30 backdrop-blur-sm rounded-full overflow-hidden shadow-inner">
+              <div 
+                className="h-full bg-gradient-to-r from-white/90 to-white rounded-full shadow-lg transition-all duration-1000 ease-out"
+                style={{ width: `${resolvedPercent}%` }}
+              />
             </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.7)' }}>
-                Resolution rate
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-emerald-100/90 tracking-wide">
+                Resolution Rate
               </span>
-              <ArrowRight size={13} color="rgba(255,255,255,0.8)" />
+              <ArrowRight size={16} className="text-emerald-200/80 group-hover:translate-x-1 transition-transform duration-300" />
             </div>
           </div>
         </div>
@@ -128,84 +75,48 @@ const StatsCards = ({ stats, type = 'all', onResolvedClick }) => {
     );
   }
 
-  /* ---- TOTAL CARD (default) ---- */
+  /* ---- TOTAL FEEDBACK CARD (default) ---- */
   return (
-    <div
-      style={{
-        position: 'relative',
-        borderRadius: '16px',
-        padding: '20px',
-        background: 'linear-gradient(135deg, #4f46e5 0%, #6366f1 60%, #818cf8 100%)',
-        boxShadow: '0 4px 20px rgba(99,102,241,0.3)',
-        overflow: 'hidden',
-        transition: 'transform 0.2s ease, box-shadow 0.2s ease',
-        height: '100%'
-      }}
-      onMouseEnter={e => {
-        e.currentTarget.style.transform = 'translateY(-3px)';
-        e.currentTarget.style.boxShadow = '0 8px 28px rgba(99,102,241,0.4)';
-      }}
-      onMouseLeave={e => {
-        e.currentTarget.style.transform = 'translateY(0)';
-        e.currentTarget.style.boxShadow = '0 4px 20px rgba(99,102,241,0.3)';
-      }}
-    >
-      {/* Decorative circles */}
-      <div style={{
-        position: 'absolute', top: '-15px', right: '-15px',
-        width: '90px', height: '90px', borderRadius: '50%',
-        background: 'rgba(255,255,255,0.1)', pointerEvents: 'none'
-      }} />
-      <div style={{
-        position: 'absolute', bottom: '-25px', left: '10px',
-        width: '70px', height: '70px', borderRadius: '50%',
-        background: 'rgba(255,255,255,0.06)', pointerEvents: 'none'
-      }} />
+    <div className="group relative bg-gradient-to-br from-indigo-600 via-purple-600 to-indigo-700 rounded-3xl p-8 shadow-2xl shadow-indigo-500/30 hover:shadow-3xl hover:shadow-indigo-500/50 hover:-translate-y-2 active:scale-[0.98] transition-all duration-500 overflow-hidden h-full border border-white/20 backdrop-blur-xl hover:border-white/40">
+      
+      {/* Premium decorative orbs */}
+      <div className="absolute top-0 -right-6 w-28 h-28 bg-white/20 rounded-full blur-xl animate-pulse" />
+      <div className="absolute bottom-0 left-6 w-24 h-24 bg-white/10 rounded-full blur-lg [animation:bounce_4s_ease-in-out_infinite]" />
+      
+      {/* Shine overlay */}
+      <div className="absolute inset-0 bg-gradient-to-r from-white/15 via-transparent to-white/10 -skew-x-12 -translate-x-[-120%] group-hover:translate-x-[120%] transition-transform duration-1000" />
 
-      <div style={{ position: 'relative', zIndex: 1 }}>
-        {/* Top row */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
-          <div>
-            <p style={{ fontSize: '11px', fontWeight: 700, color: 'rgba(255,255,255,0.75)', margin: '0 0 6px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+      <div className="relative z-10">
+        {/* Header */}
+        <div className="flex justify-between items-start mb-8 gap-4">
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-bold uppercase tracking-wider text-indigo-200/90 mb-3">
               Total Feedback
             </p>
-            <h3 style={{ fontSize: '32px', fontWeight: 800, color: '#fff', margin: 0, lineHeight: 1 }}>
+            <h3 className="text-4xl lg:text-5xl font-black text-white drop-shadow-2xl leading-none">
               {stats.total || 0}
             </h3>
           </div>
-          <div style={{
-            width: '42px', height: '42px',
-            borderRadius: '12px',
-            background: 'rgba(255,255,255,0.2)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center'
-          }}>
-            <MessageSquare size={20} color="#fff" />
+          <div className="w-14 h-14 bg-white/20 backdrop-blur-sm rounded-2xl flex items-center justify-center ring-1 ring-white/30 shadow-xl group-hover:scale-110 transition-all duration-300">
+            <MessageSquare size={24} className="text-white drop-shadow-lg" />
           </div>
         </div>
 
-        {/* Bottom row - pending info */}
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          paddingTop: '12px',
-          borderTop: '1px solid rgba(255,255,255,0.2)'
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <TrendingUp size={13} color="rgba(255,255,255,0.8)" />
-            <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.8)' }}>
-              {stats.pending || 0} pending review
+        {/* Pending Stats */}
+        <div className="pt-6 border-t border-white/20">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 bg-amber-400/20 backdrop-blur-sm rounded-xl flex items-center justify-center ring-1 ring-amber-400/30">
+                <TrendingUp size={14} className="text-amber-300" />
+              </div>
+              <span className="text-sm font-semibold text-indigo-200/90">
+                {stats.pending || 0} pending
+              </span>
+            </div>
+            <span className="text-xs font-bold bg-white/25 backdrop-blur-sm text-indigo-100 px-3 py-1 rounded-full shadow-lg">
+              {pendingPercent}%
             </span>
           </div>
-          <span style={{
-            fontSize: '10px', fontWeight: 700,
-            background: 'rgba(255,255,255,0.2)',
-            color: '#fff',
-            padding: '2px 8px',
-            borderRadius: '20px'
-          }}>
-            {pendingPercent}% pending
-          </span>
         </div>
       </div>
     </div>

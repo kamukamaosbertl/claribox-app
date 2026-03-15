@@ -5,189 +5,95 @@ import { useState } from 'react';
 const Navbar = () => {
   const [isOpen, setIsOpen] = useState(false);
   const location = useLocation();
-
   const isActive = (path) => location.pathname === path;
 
-  const linkStyle = (path) => ({
-    fontSize: '14px',
-    fontWeight: 500,
-    color: isActive(path) ? '#4f46e5' : '#6b7280',
-    textDecoration: 'none',
-    padding: '6px 4px',
-    borderBottom: isActive(path) ? '2px solid #6366f1' : '2px solid transparent',
-    transition: 'all 0.2s ease'
-  });
-
   return (
-    <nav style={{
-      position: 'sticky', top: 0, zIndex: 50,
-      background: 'rgba(255,255,255,0.85)',
-      backdropFilter: 'blur(12px)',
-      borderBottom: '1px solid rgba(99,102,241,0.1)',
-      boxShadow: '0 1px 12px rgba(99,102,241,0.08)'
-    }}>
-      <div style={{
-        maxWidth: '1280px',
-        margin: '0 auto',
-        padding: '0 24px',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        height: '64px'
-      }}>
+    <nav className="sticky top-0 z-50 bg-white/85 backdrop-blur-md border-b border-indigo-500/10 shadow-sm shadow-indigo-500/5">
+
+      <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
 
         {/* Logo */}
-        <Link
-          to="/"
-          style={{
-            display: 'flex', alignItems: 'center', gap: '10px',
-            textDecoration: 'none'
-          }}
-        >
-          <div style={{
-            width: '36px', height: '36px',
-            borderRadius: '10px',
-            background: 'linear-gradient(135deg, #4f46e5, #7c3aed)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            boxShadow: '0 2px 8px rgba(99,102,241,0.4)'
-          }}>
-            <MessageSquare size={18} color="#fff" />
+        <Link to="/" className="flex items-center gap-2.5 no-underline">
+          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-600 to-violet-600 flex items-center justify-center shadow-md shadow-indigo-500/30 flex-shrink-0">
+            <MessageSquare className="w-4.5 h-4.5 text-white" size={18} />
           </div>
-          <span style={{
-            fontSize: '18px', fontWeight: 800,
-            color: '#1e1b4b',
-            letterSpacing: '-0.3px'
-          }}>
-            Clari<span style={{ color: '#6366f1' }}>Box</span>
+          <span className="text-lg font-extrabold text-indigo-950 tracking-tight">
+            Clari<span className="text-indigo-600">Box</span>
           </span>
         </Link>
 
         {/* Desktop nav */}
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: '28px'
-        }}
-          className="desktop-nav"
-        >
-          <Link to="/" style={linkStyle('/')}>Home</Link>
-          <Link to="/submit" style={linkStyle('/submit')}>Submit Feedback</Link>
-
-          {/* CTA button */}
+        <div className="hidden md:flex items-center gap-7">
+          <Link
+            to="/"
+            className={`text-sm font-medium pb-0.5 border-b-2 transition-colors no-underline
+              ${isActive('/') ? 'text-indigo-600 border-indigo-500' : 'text-slate-500 border-transparent hover:text-slate-800'}`}
+          >
+            Home
+          </Link>
           <Link
             to="/submit"
-            style={{
-              display: 'flex', alignItems: 'center', gap: '6px',
-              padding: '9px 20px',
-              borderRadius: '10px',
-              background: 'linear-gradient(135deg, #4f46e5, #6366f1)',
-              color: '#fff',
-              fontSize: '13px', fontWeight: 700,
-              textDecoration: 'none',
-              boxShadow: '0 2px 10px rgba(99,102,241,0.35)',
-              transition: 'all 0.2s ease'
-            }}
-            onMouseEnter={e => {
-              e.currentTarget.style.transform = 'translateY(-1px)';
-              e.currentTarget.style.boxShadow = '0 4px 16px rgba(99,102,241,0.45)';
-            }}
-            onMouseLeave={e => {
-              e.currentTarget.style.transform = 'translateY(0)';
-              e.currentTarget.style.boxShadow = '0 2px 10px rgba(99,102,241,0.35)';
-            }}
+            className={`text-sm font-medium pb-0.5 border-b-2 transition-colors no-underline
+              ${isActive('/submit') ? 'text-indigo-600 border-indigo-500' : 'text-slate-500 border-transparent hover:text-slate-800'}`}
           >
-            <Sparkles size={13} />
+            Submit Feedback
+          </Link>
+
+          {/* CTA */}
+          <Link
+            to="/submit"
+            className="flex items-center gap-1.5 px-5 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-500 text-white text-sm font-bold shadow-md shadow-indigo-500/30 hover:shadow-lg hover:shadow-indigo-500/40 hover:-translate-y-0.5 transition-all no-underline"
+          >
+            <Sparkles className="w-3.5 h-3.5" />
             Speak Up
           </Link>
         </div>
 
-        {/* Mobile menu toggle */}
+        {/* Mobile toggle */}
         <button
           onClick={() => setIsOpen(!isOpen)}
-          style={{
-            display: 'none',
-            width: '36px', height: '36px',
-            borderRadius: '9px',
-            border: '1px solid #e0e0f0',
-            background: '#fff',
-            alignItems: 'center', justifyContent: 'center',
-            cursor: 'pointer', color: '#4f46e5'
-          }}
-          className="mobile-toggle"
+          className="md:hidden w-9 h-9 rounded-xl border border-slate-200 bg-white flex items-center justify-center text-indigo-600 hover:bg-indigo-50 transition-colors"
         >
-          {isOpen ? <X size={18} /> : <Menu size={18} />}
+          {isOpen ? <X className="w-4.5 h-4.5" size={18} /> : <Menu className="w-4.5 h-4.5" size={18} />}
         </button>
       </div>
 
       {/* Mobile menu */}
       {isOpen && (
-        <div style={{
-          borderTop: '1px solid #f0f0f5',
-          padding: '16px 24px 20px',
-          background: '#fff',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '4px',
-          animation: 'slideDown 0.2s ease'
-        }}>
+        <div className="md:hidden border-t border-slate-100 px-6 py-4 bg-white flex flex-col gap-1 animate-slideDown">
           <Link
             to="/"
             onClick={() => setIsOpen(false)}
-            style={{
-              padding: '11px 14px',
-              borderRadius: '10px',
-              fontSize: '14px', fontWeight: 500,
-              color: isActive('/') ? '#4f46e5' : '#374151',
-              background: isActive('/') ? '#eef2ff' : 'transparent',
-              textDecoration: 'none',
-              transition: 'background 0.15s'
-            }}
+            className={`px-4 py-3 rounded-xl text-sm font-medium no-underline transition-colors
+              ${isActive('/') ? 'text-indigo-600 bg-indigo-50' : 'text-slate-700 hover:bg-slate-50'}`}
           >
             Home
           </Link>
           <Link
             to="/submit"
             onClick={() => setIsOpen(false)}
-            style={{
-              padding: '11px 14px',
-              borderRadius: '10px',
-              fontSize: '14px', fontWeight: 500,
-              color: isActive('/submit') ? '#4f46e5' : '#374151',
-              background: isActive('/submit') ? '#eef2ff' : 'transparent',
-              textDecoration: 'none',
-              transition: 'background 0.15s'
-            }}
+            className={`px-4 py-3 rounded-xl text-sm font-medium no-underline transition-colors
+              ${isActive('/submit') ? 'text-indigo-600 bg-indigo-50' : 'text-slate-700 hover:bg-slate-50'}`}
           >
             Submit Feedback
           </Link>
           <Link
             to="/submit"
             onClick={() => setIsOpen(false)}
-            style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '7px',
-              marginTop: '8px',
-              padding: '12px',
-              borderRadius: '10px',
-              background: 'linear-gradient(135deg, #4f46e5, #6366f1)',
-              color: '#fff',
-              fontSize: '14px', fontWeight: 700,
-              textDecoration: 'none',
-              boxShadow: '0 2px 10px rgba(99,102,241,0.3)'
-            }}
+            className="mt-2 flex items-center justify-center gap-2 py-3 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-500 text-white text-sm font-bold shadow-md shadow-indigo-500/25 no-underline"
           >
-            <Sparkles size={14} />
+            <Sparkles className="w-3.5 h-3.5" />
             Speak Up
           </Link>
         </div>
       )}
 
       <style>{`
-        @media (max-width: 768px) {
-          .desktop-nav { display: none !important; }
-          .mobile-toggle { display: flex !important; }
-        }
         @keyframes slideDown {
           from { opacity: 0; transform: translateY(-8px); }
           to   { opacity: 1; transform: translateY(0); }
         }
+        .animate-slideDown { animation: slideDown 0.2s ease; }
       `}</style>
     </nav>
   );

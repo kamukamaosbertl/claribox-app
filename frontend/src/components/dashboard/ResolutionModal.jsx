@@ -9,32 +9,18 @@ const CATEGORIES = [
 
 const EMPTY_FORM = { title: '', description: '', category: 'General' };
 
-const inputStyle = (hasError) => ({
-  width: '100%',
-  padding: '10px 14px',
-  borderRadius: '10px',
-  border: `1px solid ${hasError ? '#fca5a5' : '#e0e0f0'}`,
-  fontSize: '13px',
-  color: '#1e1b4b',
-  background: hasError ? '#fff5f5' : '#fff',
-  outline: 'none',
-  fontFamily: 'inherit',
-  boxSizing: 'border-box',
-  transition: 'border-color 0.2s'
-});
-
 const ResolutionModal = ({ isOpen, onClose, onSuccess }) => {
   if (!isOpen) return null;
 
   const [formData, setFormData] = useState(EMPTY_FORM);
-  const [loading, setLoading]   = useState(false);
-  const [errors, setErrors]     = useState({});
+  const [loading,  setLoading]  = useState(false);
+  const [errors,   setErrors]   = useState({});
 
   const validate = () => {
     const e = {};
-    if (!formData.title.trim())         e.title = 'Title is required';
-    if (formData.title.length > 100)    e.title = 'Max 100 characters';
-    if (!formData.description.trim())   e.description = 'Description is required';
+    if (!formData.title.trim())            e.title = 'Title is required';
+    if (formData.title.length > 100)       e.title = 'Max 100 characters';
+    if (!formData.description.trim())      e.description = 'Description is required';
     if (formData.description.length > 500) e.description = 'Max 500 characters';
     setErrors(e);
     return Object.keys(e).length === 0;
@@ -61,91 +47,46 @@ const ResolutionModal = ({ isOpen, onClose, onSuccess }) => {
   const isFormEmpty = !formData.title.trim() && !formData.description.trim();
 
   return (
-    <div style={{
-      position: 'fixed', inset: 0, zIndex: 50,
-      display: 'flex', alignItems: 'center', justifyContent: 'center'
-    }}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+
       {/* Backdrop */}
       <div
         onClick={onClose}
-        style={{
-          position: 'absolute', inset: 0,
-          background: 'rgba(15,23,42,0.55)',
-          backdropFilter: 'blur(3px)'
-        }}
+        className="absolute inset-0 bg-slate-900/55 backdrop-blur-sm"
       />
 
       {/* Modal */}
-      <div style={{
-        position: 'relative',
-        background: '#fff',
-        borderRadius: '20px',
-        boxShadow: '0 20px 60px rgba(0,0,0,0.2)',
-        width: '100%', maxWidth: '480px',
-        margin: '0 16px',
-        maxHeight: '90vh',
-        overflowY: 'auto',
-        animation: 'modalIn 0.2s ease'
-      }}>
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto animate-modal">
 
-        {/* Header - green gradient */}
-        <div style={{
-          background: 'linear-gradient(135deg, #059669 0%, #10b981 100%)',
-          borderRadius: '20px 20px 0 0',
-          padding: '20px 24px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          position: 'relative',
-          overflow: 'hidden'
-        }}>
+        {/* Header */}
+        <div className="relative overflow-hidden bg-gradient-to-r from-emerald-600 to-emerald-500 rounded-t-2xl px-6 py-5 flex items-center justify-between">
           {/* Decorative circle */}
-          <div style={{
-            position: 'absolute', top: '-20px', right: '-20px',
-            width: '90px', height: '90px', borderRadius: '50%',
-            background: 'rgba(255,255,255,0.1)', pointerEvents: 'none'
-          }} />
+          <div className="absolute -top-5 -right-5 w-24 h-24 rounded-full bg-white/10 pointer-events-none" />
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', position: 'relative' }}>
-            <div style={{
-              width: '38px', height: '38px', borderRadius: '11px',
-              background: 'rgba(255,255,255,0.2)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center'
-            }}>
-              <CheckCircle size={18} color="#fff" />
+          <div className="relative flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center">
+              <CheckCircle className="w-5 h-5 text-white" />
             </div>
             <div>
-              <h2 style={{ fontSize: '15px', fontWeight: 700, color: '#fff', margin: 0 }}>
-                Add Resolution
-              </h2>
-              <p style={{ fontSize: '11px', color: 'rgba(255,255,255,0.7)', margin: 0 }}>
-                Document how you resolved the issue
-              </p>
+              <h2 className="text-sm font-bold text-white leading-none mb-0.5">Add Resolution</h2>
+              <p className="text-xs text-white/70">Document how you resolved the issue</p>
             </div>
           </div>
 
           <button
             onClick={onClose}
-            style={{
-              width: '30px', height: '30px',
-              borderRadius: '9px',
-              border: 'none',
-              background: 'rgba(255,255,255,0.2)',
-              color: '#fff',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              cursor: 'pointer', position: 'relative'
-            }}
+            className="relative w-8 h-8 rounded-xl bg-white/20 hover:bg-white/30 text-white flex items-center justify-center transition-colors border-none cursor-pointer"
           >
-            <X size={14} />
+            <X className="w-4 h-4" />
           </button>
         </div>
 
-        {/* Form body */}
-        <form onSubmit={handleSubmit} style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        {/* Form */}
+        <form onSubmit={handleSubmit} className="p-6 flex flex-col gap-4">
 
           {/* Title */}
           <div>
-            <label style={{ fontSize: '12px', fontWeight: 600, color: '#4b5563', display: 'block', marginBottom: '6px' }}>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">
               Resolution Title
             </label>
             <input
@@ -153,51 +94,49 @@ const ResolutionModal = ({ isOpen, onClose, onSuccess }) => {
               value={formData.title}
               onChange={e => setFormData({ ...formData, title: e.target.value })}
               placeholder="e.g., Fixed WiFi issues in Library"
-              style={inputStyle(!!errors.title)}
-              onFocus={e => e.target.style.borderColor = '#6366f1'}
-              onBlur={e => e.target.style.borderColor = errors.title ? '#fca5a5' : '#e0e0f0'}
+              className={`w-full px-4 py-2.5 rounded-xl border text-sm outline-none transition-colors focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400
+                ${errors.title
+                  ? 'border-red-300 bg-red-50'
+                  : 'border-slate-200 bg-white'
+                }`}
             />
             {errors.title && (
-              <p style={{ fontSize: '11px', color: '#ef4444', margin: '4px 0 0' }}>{errors.title}</p>
+              <p className="text-xs text-red-500 mt-1">{errors.title}</p>
             )}
-            <p style={{ fontSize: '11px', color: '#9ca3af', margin: '4px 0 0', textAlign: 'right' }}>
-              {formData.title.length}/100
-            </p>
+            <p className="text-xs text-gray-400 mt-1 text-right">{formData.title.length}/100</p>
           </div>
 
           {/* Description */}
           <div>
-            <label style={{ fontSize: '12px', fontWeight: 600, color: '#4b5563', display: 'block', marginBottom: '6px' }}>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">
               Description
             </label>
             <textarea
               value={formData.description}
               onChange={e => setFormData({ ...formData, description: e.target.value })}
-              placeholder="Describe what was done to resolve this issue and how it addresses student feedback..."
+              placeholder="Describe what was done to resolve this issue..."
               rows={4}
-              style={{ ...inputStyle(!!errors.description), resize: 'none', lineHeight: '1.55' }}
-              onFocus={e => e.target.style.borderColor = '#6366f1'}
-              onBlur={e => e.target.style.borderColor = errors.description ? '#fca5a5' : '#e0e0f0'}
+              className={`w-full px-4 py-2.5 rounded-xl border text-sm outline-none transition-colors resize-none focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400
+                ${errors.description
+                  ? 'border-red-300 bg-red-50'
+                  : 'border-slate-200 bg-white'
+                }`}
             />
             {errors.description && (
-              <p style={{ fontSize: '11px', color: '#ef4444', margin: '4px 0 0' }}>{errors.description}</p>
+              <p className="text-xs text-red-500 mt-1">{errors.description}</p>
             )}
-            <p style={{ fontSize: '11px', color: '#9ca3af', margin: '4px 0 0', textAlign: 'right' }}>
-              {formData.description.length}/500
-            </p>
+            <p className="text-xs text-gray-400 mt-1 text-right">{formData.description.length}/500</p>
           </div>
 
           {/* Category */}
           <div>
-            <label style={{ fontSize: '12px', fontWeight: 600, color: '#4b5563', display: 'block', marginBottom: '6px' }}>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">
               Category
             </label>
             <select
               value={formData.category}
               onChange={e => setFormData({ ...formData, category: e.target.value })}
-              style={inputStyle(false)}
-              onFocus={e => e.target.style.borderColor = '#6366f1'}
-              onBlur={e => e.target.style.borderColor = '#e0e0f0'}
+              className="w-full px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-sm outline-none focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 transition-colors"
             >
               {CATEGORIES.map(cat => (
                 <option key={cat} value={cat}>{cat}</option>
@@ -206,59 +145,33 @@ const ResolutionModal = ({ isOpen, onClose, onSuccess }) => {
           </div>
 
           {/* Divider */}
-          <div style={{ borderTop: '1px solid #f0f0f5', marginTop: '4px' }} />
+          <hr className="border-slate-100" />
 
           {/* Buttons */}
-          <div style={{ display: 'flex', gap: '10px' }}>
+          <div className="flex gap-3">
             <button
               type="submit"
               disabled={loading || isFormEmpty}
-              style={{
-                flex: 1,
-                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '7px',
-                padding: '11px',
-                borderRadius: '11px',
-                border: 'none',
-                background: loading || isFormEmpty
-                  ? '#a5b4fc'
-                  : 'linear-gradient(135deg, #4f46e5, #6366f1)',
-                color: '#fff',
-                fontSize: '13px', fontWeight: 700,
-                cursor: loading || isFormEmpty ? 'not-allowed' : 'pointer',
-                boxShadow: loading || isFormEmpty ? 'none' : '0 2px 10px rgba(99,102,241,0.35)',
-                transition: 'all 0.2s'
-              }}
+              className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold text-white transition-all
+                ${loading || isFormEmpty
+                  ? 'bg-indigo-300 cursor-not-allowed'
+                  : 'bg-gradient-to-r from-indigo-600 to-indigo-500 hover:shadow-lg hover:shadow-indigo-200 hover:-translate-y-0.5 cursor-pointer'
+                }`}
             >
               {loading ? (
                 <>
-                  <div style={{
-                    width: '13px', height: '13px',
-                    border: '2px solid rgba(255,255,255,0.4)',
-                    borderTopColor: '#fff',
-                    borderRadius: '50%',
-                    animation: 'spin 0.8s linear infinite'
-                  }} />
+                  <div className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
                   Saving...
                 </>
               ) : (
-                <><Send size={13} /> Publish Resolution</>
+                <><Send className="w-3.5 h-3.5" /> Publish Resolution</>
               )}
             </button>
+
             <button
               type="button"
               onClick={onClose}
-              style={{
-                padding: '11px 20px',
-                borderRadius: '11px',
-                border: '1px solid #e0e0f0',
-                background: '#fff',
-                color: '#6b7280',
-                fontSize: '13px', fontWeight: 600,
-                cursor: 'pointer',
-                transition: 'background 0.2s'
-              }}
-              onMouseEnter={e => e.currentTarget.style.background = '#f8f8fc'}
-              onMouseLeave={e => e.currentTarget.style.background = '#fff'}
+              className="px-5 py-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-gray-600 text-sm font-semibold transition-colors cursor-pointer"
             >
               Cancel
             </button>
@@ -268,13 +181,12 @@ const ResolutionModal = ({ isOpen, onClose, onSuccess }) => {
       </div>
 
       <style>{`
+        .animate-modal {
+          animation: modalIn 0.2s ease;
+        }
         @keyframes modalIn {
           from { opacity: 0; transform: scale(0.95) translateY(10px); }
-          to   { opacity: 1; transform: scale(1)    translateY(0); }
-        }
-        @keyframes spin {
-          from { transform: rotate(0deg); }
-          to   { transform: rotate(360deg); }
+          to   { opacity: 1; transform: scale(1) translateY(0); }
         }
       `}</style>
     </div>

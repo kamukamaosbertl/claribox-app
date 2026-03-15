@@ -6,12 +6,12 @@ import {
 import { adminAPI } from '../../services/api';
 
 const menuItems = [
-  { path: '/admin/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-  { path: '/admin/chat',      icon: Bot,             label: 'AI Assistant' },
-  { path: '/admin/insights',  icon: PieChart,        label: 'Category Insights' },
-  { path: '/admin/reports',   icon: FileText,        label: 'Reports' },
-  { path: '/admin/feedback',  icon: MessageSquare,   label: 'All Feedback' },
-  { path: '/admin/settings',  icon: Cog,             label: 'Settings' },
+  { path: '/admin/dashboard', icon: LayoutDashboard, label: 'Dashboard'        },
+  { path: '/admin/chat',      icon: Bot,             label: 'AI Assistant'     },
+  { path: '/admin/insights',  icon: PieChart,        label: 'Category Insights'},
+  { path: '/admin/reports',   icon: FileText,        label: 'Reports'          },
+  { path: '/admin/feedback',  icon: MessageSquare,   label: 'All Feedback'     },
+  { path: '/admin/settings',  icon: Cog,             label: 'Settings'         },
 ];
 
 const AdminSidebar = ({ isOpen, onClose }) => {
@@ -23,234 +23,119 @@ const AdminSidebar = ({ isOpen, onClose }) => {
   };
 
   const SidebarContent = () => (
-    <div style={{
-      display: 'flex', flexDirection: 'column',
-      height: '100%', width: '260px',
-      background: 'linear-gradient(180deg, #1e1b4b 0%, #1a1730 60%, #0f0e1a 100%)',
-      color: '#fff',
-      borderRight: '1px solid rgba(99,102,241,0.15)'
-    }}>
+    <div className="flex flex-col h-full w-[260px] text-white border-r border-indigo-900/30"
+      style={{ background: 'linear-gradient(180deg, #1e1b4b 0%, #1a1730 60%, #0f0e1a 100%)' }}
+    >
 
       {/* Logo */}
-      <div style={{
-        padding: '22px 20px',
-        borderBottom: '1px solid rgba(255,255,255,0.06)',
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between'
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <div style={{
-            width: '38px', height: '38px',
-            borderRadius: '11px',
-            background: 'linear-gradient(135deg, #4f46e5, #7c3aed)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            boxShadow: '0 4px 14px rgba(99,102,241,0.4)',
-            flexShrink: 0
-          }}>
-            <Shield size={18} color="#fff" />
+      <div className="flex items-center justify-between px-5 py-5 border-b border-white/5">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center shadow-lg shadow-indigo-500/40 flex-shrink-0">
+            <Shield className="w-4.5 h-4.5 text-white" size={18} />
           </div>
           <div>
-            <p style={{ fontSize: '17px', fontWeight: 900, color: '#fff', margin: 0, letterSpacing: '-0.3px' }}>
-              Clari<span style={{ color: '#818cf8' }}>Box</span>
+            <p className="text-2xl font-black text-white tracking-tight leading-none">
+              Clari<span className="text-indigo-400">Box</span>
             </p>
-            <p style={{ fontSize: '10px', color: 'rgba(255,255,255,0.4)', margin: 0, fontWeight: 500 }}>
-              Admin Portal
-            </p>
+            <p className="text-xs text-white/40 font-medium mt-0.5">Admin Portal</p>
           </div>
         </div>
 
-        {/* Mobile close */}
+        {/* Mobile close — only visible on mobile */}
         <button
           onClick={onClose}
-          style={{
-            display: 'none', width: '28px', height: '28px',
-            borderRadius: '8px', border: 'none',
-            background: 'rgba(255,255,255,0.08)',
-            color: 'rgba(255,255,255,0.6)',
-            alignItems: 'center', justifyContent: 'center',
-            cursor: 'pointer'
-          }}
-          className="mobile-close-btn"
+          className="lg:hidden w-7 h-7 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center text-white/60 transition-colors"
         >
-          <X size={14} />
+          <X className="w-3.5 h-3.5" />
         </button>
       </div>
 
       {/* Nav label */}
-      <div style={{ padding: '20px 20px 8px' }}>
-        <p style={{
-          fontSize: '10px', fontWeight: 700,
-          color: 'rgba(255,255,255,0.25)',
-          textTransform: 'uppercase', letterSpacing: '1px',
-          margin: 0
-        }}>
-          Navigation
-        </p>
+      <div className="px-5 pt-5 pb-2">
+        <p className="text-xs font-bold text-white/25 uppercase tracking-widest">Navigation</p>
       </div>
 
       {/* Nav items */}
-      <nav style={{ flex: 1, padding: '0 12px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '3px' }}>
+      <nav className="flex-1 px-3 overflow-y-auto space-y-0.5">
         {menuItems.map((item) => (
           <NavLink
             key={item.path}
             to={item.path}
             onClick={onClose}
-            style={({ isActive }) => ({
-              display: 'flex', alignItems: 'center', gap: '12px',
-              padding: '11px 14px',
-              borderRadius: '11px',
-              textDecoration: 'none',
-              fontSize: '13px', fontWeight: 600,
-              transition: 'all 0.2s ease',
-              background: isActive
-                ? 'linear-gradient(135deg, #4f46e5, #6366f1)'
-                : 'transparent',
-              color: isActive ? '#fff' : 'rgba(255,255,255,0.45)',
-              boxShadow: isActive ? '0 4px 14px rgba(99,102,241,0.35)' : 'none',
-              transform: isActive ? 'translateX(2px)' : 'translateX(0)'
-            })}
-            onMouseEnter={e => {
-              if (!e.currentTarget.style.background.includes('gradient')) {
-                e.currentTarget.style.background = 'rgba(255,255,255,0.06)';
-                e.currentTarget.style.color = '#fff';
-              }
-            }}
-            onMouseLeave={e => {
-              if (!e.currentTarget.style.background.includes('gradient')) {
-                e.currentTarget.style.background = 'transparent';
-                e.currentTarget.style.color = 'rgba(255,255,255,0.45)';
-              }
-            }}
+            className={({ isActive }) =>
+              `flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200
+              ${isActive
+                ? 'bg-gradient-to-r from-indigo-600 to-indigo-500 text-white shadow-lg shadow-indigo-500/30 translate-x-0.5'
+                : 'text-white/45 hover:bg-white/5 hover:text-white'
+              }`
+            }
           >
-            <item.icon size={16} style={{ flexShrink: 0 }} />
+            <item.icon className="w-4 h-4 flex-shrink-0" />
             {item.label}
           </NavLink>
         ))}
       </nav>
 
       {/* AI CTA card */}
-      <div style={{
-        margin: '12px',
-        borderRadius: '14px',
-        background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)',
-        padding: '16px',
-        border: '1px solid rgba(255,255,255,0.1)',
-        boxShadow: '0 4px 20px rgba(99,102,241,0.3)',
-        position: 'relative', overflow: 'hidden'
-      }}>
-        {/* Decorative circle */}
-        <div style={{
-          position: 'absolute', top: '-20px', right: '-20px',
-          width: '80px', height: '80px', borderRadius: '50%',
-          background: 'rgba(255,255,255,0.08)', pointerEvents: 'none'
-        }} />
+      <div className="mx-3 mb-3 rounded-2xl p-4 relative overflow-hidden border border-white/10 shadow-lg shadow-indigo-500/20"
+        style={{ background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)' }}
+      >
+        <div className="absolute -top-5 -right-5 w-20 h-20 rounded-full bg-white/10 pointer-events-none" />
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px', position: 'relative' }}>
-          <div style={{
-            width: '28px', height: '28px', borderRadius: '8px',
-            background: 'rgba(255,255,255,0.2)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center'
-          }}>
-            <Bot size={14} color="#fff" />
+        <div className="relative flex items-center gap-2 mb-2">
+          <div className="w-7 h-7 rounded-lg bg-white/20 flex items-center justify-center flex-shrink-0">
+            <Bot className="w-3.5 h-3.5 text-white" />
           </div>
-          <span style={{ fontSize: '13px', fontWeight: 700, color: '#fff' }}>AI Assistant</span>
-          <div style={{ marginLeft: 'auto' }}>
-            <Sparkles size={12} color="rgba(255,255,255,0.6)" />
-          </div>
+          <span className="text-sm font-bold text-white">AI Assistant</span>
+          <Sparkles className="w-3 h-3 text-white/60 ml-auto" />
         </div>
 
-        <p style={{ fontSize: '11px', color: 'rgba(255,255,255,0.65)', margin: '0 0 12px', lineHeight: 1.5, position: 'relative' }}>
+        <p className="relative text-xs text-white/65 mb-3 leading-relaxed">
           Analyze feedback and generate reports instantly.
         </p>
 
         <NavLink
           to="/admin/chat"
           onClick={onClose}
-          style={{
-            display: 'block', width: '100%',
-            padding: '9px',
-            borderRadius: '9px',
-            background: '#fff',
-            color: '#4f46e5',
-            fontSize: '12px', fontWeight: 800,
-            textDecoration: 'none', textAlign: 'center',
-            boxSizing: 'border-box',
-            position: 'relative',
-            transition: 'background 0.2s'
-          }}
-          onMouseEnter={e => e.currentTarget.style.background = '#eef2ff'}
-          onMouseLeave={e => e.currentTarget.style.background = '#fff'}
+          className="relative block w-full py-2 rounded-xl bg-white text-indigo-600 text-xs font-extrabold text-center hover:bg-indigo-50 transition-colors no-underline"
         >
           Start Chat →
         </NavLink>
       </div>
 
       {/* Logout */}
-      <div style={{ padding: '8px 12px 16px', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+      <div className="px-3 pb-4 border-t border-white/5 pt-2">
         <button
           onClick={handleLogout}
-          style={{
-            display: 'flex', alignItems: 'center', gap: '10px',
-            width: '100%', padding: '11px 14px',
-            borderRadius: '11px', border: 'none',
-            background: 'transparent',
-            color: 'rgba(255,255,255,0.35)',
-            fontSize: '13px', fontWeight: 600,
-            cursor: 'pointer', transition: 'all 0.2s',
-            textAlign: 'left'
-          }}
-          onMouseEnter={e => {
-            e.currentTarget.style.background = 'rgba(239,68,68,0.1)';
-            e.currentTarget.style.color = '#f87171';
-          }}
-          onMouseLeave={e => {
-            e.currentTarget.style.background = 'transparent';
-            e.currentTarget.style.color = 'rgba(255,255,255,0.35)';
-          }}
+          className="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-semibold text-white/35 hover:bg-red-500/10 hover:text-red-400 transition-all"
         >
-          <LogOut size={15} />
+          <LogOut className="w-4 h-4" />
           Logout
         </button>
       </div>
 
-      <style>{`
-        @media (max-width: 1024px) {
-          .mobile-close-btn { display: flex !important; }
-        }
-      `}</style>
     </div>
   );
 
   return (
     <>
-      {/* Desktop */}
-      <div style={{
-        display: 'none',
-        position: 'fixed', top: 0, bottom: 0, left: 0,
-        zIndex: 40, flexDirection: 'column'
-      }}
-        className="desktop-sidebar"
-      >
+      {/* Desktop — fixed sidebar */}
+      <div className="hidden lg:flex flex-col fixed inset-y-0 left-0 z-40">
         <SidebarContent />
       </div>
 
-      {/* Mobile */}
+      {/* Mobile — slide-in overlay */}
       {isOpen && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 50 }}>
+        <div className="lg:hidden fixed inset-0 z-50">
           <div
-            style={{ position: 'fixed', inset: 0, background: 'rgba(15,14,26,0.7)', backdropFilter: 'blur(4px)' }}
+            className="fixed inset-0 bg-[#0f0e1a]/70 backdrop-blur-sm"
             onClick={onClose}
           />
-          <div style={{ position: 'fixed', top: 0, bottom: 0, left: 0 }}>
+          <div className="fixed inset-y-0 left-0">
             <SidebarContent />
           </div>
         </div>
       )}
-
-      <style>{`
-        @media (min-width: 1024px) {
-          .desktop-sidebar { display: flex !important; }
-        }
-      `}</style>
     </>
   );
 };
