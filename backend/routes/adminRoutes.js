@@ -207,6 +207,14 @@ router.get('/analytics', auth, async (req, res) => {
       isPublished: true    // only count published resolutions
     });
 
+    // 🔹 NEW: Get sentiment stats
+    const positive = await Feedback.countDocuments({ ...matchQuery, sentiment: 'positive' });
+    const neutral = await Feedback.countDocuments({ ...matchQuery, sentiment: 'neutral' });
+    const negative = await Feedback.countDocuments({ ...matchQuery, sentiment: 'negative' });
+    
+    // Calculate overall sentiment score (-1 to 1)
+    const overallScore = total > 0 ? (positive - negative) / total : 0;
+
     // Category stats with date filter
     const categoryStats = await Feedback.aggregate([
       { $match: matchQuery },
@@ -227,6 +235,12 @@ router.get('/analytics', auth, async (req, res) => {
       stats: { 
         total, 
         resolved 
+      },
+      sentiment: {
+        positive,
+        neutral,
+        negative,
+        overallScore: Math.round(overallScore * 100) / 100
       },
       categoryData: categoryStats.map(c => ({ name: c._id, count: c.count, value: c.count })),
       timeData: timeStats.map(t => ({ date: t._id, feedback: t.feedback }))

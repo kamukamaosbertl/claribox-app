@@ -15,15 +15,35 @@ import Reports from './pages/admin/Reports';
 import Settings from './pages/admin/Settings';
 import ChatWithAI from './pages/admin/ChatWithAI';
 
+// Student layout wrapper — wraps all student-facing pages with Navbar + Footer
+const StudentLayout = ({ children }) => (
+  <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
+    <Navbar />
+    <main style={{ flex: 1 }}>
+      {children}
+    </main>
+    <Footer />
+  </div>
+);
+
 function App() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* Student Routes */}
-        <Route path="/" element={<><Navbar /><Home /></>} />
-        <Route path="/submit" element={<><Navbar /><SubmitFeedback /></>} />
-        
-        {/* Admin Routes */}
+
+        {/* Student Routes — Navbar + Footer on every page */}
+        <Route path="/" element={
+          <StudentLayout>
+            <Home />
+          </StudentLayout>
+        } />
+        <Route path="/submit" element={
+          <StudentLayout>
+            <SubmitFeedback />
+          </StudentLayout>
+        } />
+
+        {/* Admin Routes — no Navbar/Footer, AdminLayout handles its own UI */}
         <Route path="/admin/login" element={<Login />} />
         <Route path="/admin" element={<AdminLayout />}>
           <Route index element={<Dashboard />} />
@@ -34,6 +54,7 @@ function App() {
           <Route path="settings" element={<Settings />} />
           <Route path="feedback" element={<Dashboard />} />
         </Route>
+
       </Routes>
     </BrowserRouter>
   );

@@ -1,70 +1,58 @@
 import { useState, useEffect, useRef } from 'react';
-import { 
-  Loader2, 
-  Send, 
-  Bot, 
-  User, 
-  Sparkles,
-  RefreshCw,
-  MessageSquare
-} from 'lucide-react';
+import { Send, Bot, User, Sparkles, RefreshCw, Moon, Sun, Zap } from 'lucide-react';
 import { adminAPI } from '../../services/api';
 
+const suggestedQuestions = [
+  'What are the top complaints this month?',
+  'Show me feedback about library',
+  'How many pending feedbacks?',
+  'What should I prioritize?',
+  'Summarize negative feedback',
+  'What is the most common category?'
+];
+
+const WELCOME_MESSAGE = {
+  id: 0,
+  role: 'assistant',
+  text: 'Hello! I\'m your AI assistant. I can only answer questions related to student feedback.\n\nFor example:\n• "What are the main complaints this month?"\n• "Show me feedback about facilities"\n• "How many pending feedbacks are there?"\n• "What should I prioritize?"\n\nHow can I help you today?',
+  timestamp: new Date()
+};
+
 const ChatWithAI = () => {
-  const [messages, setMessages] = useState([
-    {
-      id: 0,
-      role: 'assistant',
-      text: 'Hello! I\'m your AI assistant. You can ask me anything about the feedback submitted by students. For example:\n\n• "What are the main complaints this month?"\n• "Show me all feedback about WiFi"\n• "What should I prioritize?"\n• "Summarize all feedback from last week"\n\nHow can I help you today?',
-      timestamp: new Date()
-    }
-  ]);
+  const [messages, setMessages] = useState([WELCOME_MESSAGE]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [dark, setDark] = useState(false);
   const messagesEndRef = useRef(null);
-
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
+  const textareaRef = useRef(null);
 
   useEffect(() => {
-    scrollToBottom();
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  const addMessage = (role, text, sources = null) => {
+    setMessages(prev => [...prev, {
+      id: Date.now() + Math.random(),
+      role,
+      text,
+      sources,
+      timestamp: new Date()
+    }]);
+  };
 
   const handleSend = async () => {
     if (!input.trim() || loading) return;
-
-    const userMessage = {
-      id: Date.now(),
-      role: 'user',
-      text: input,
-      timestamp: new Date()
-    };
-
-    setMessages(prev => [...prev, userMessage]);
+    const question = input.trim();
     setInput('');
+    addMessage('user', question);
     setLoading(true);
-
     try {
-      const history = messages.map(m => ({ role: m.role, content: m.text }));
-      const response = await adminAPI.chatWithAI(input, history);
-      
-      const aiMessage = {
-        id: Date.now() + 1,
-        role: 'assistant',
-        text: response.answer || response.message || 'I couldn\'t find an answer. Please try again.',
-        timestamp: new Date()
-      };
-
-      setMessages(prev => [...prev, aiMessage]);
+      const response = await adminAPI.chatWithAI(question);
+      const data = response.data;
+      addMessage('assistant', data.answer || 'I could not find an answer. Please try again.', data.sources || null);
     } catch (err) {
-      const errorMessage = {
-        id: Date.now() + 1,
-        role: 'assistant',
-        text: 'Sorry, I encountered an error. Please try again.',
-        timestamp: new Date()
-      };
-      setMessages(prev => [...prev, errorMessage]);
+      const backendMessage = err.response?.data?.message || 'Something went wrong. Make sure Ollama is running.';
+      addMessage('assistant', backendMessage);
     } finally {
       setLoading(false);
     }
@@ -77,99 +65,163 @@ const ChatWithAI = () => {
     }
   };
 
-  const suggestedQuestions = [
-    'What are the top complaints this month?',
-    'Show me all feedback about library',
-    'What should I prioritize?',
-    'Summarize all feedback from this week'
-  ];
+  const handleReset = () => {
+    setMessages([{ ...WELCOME_MESSAGE, timestamp: new Date() }]);
+    setInput('');
+  };
+
+  // Theme tokens
+  const t = {
+    bg:          dark ? '#0f1117' : '#f5f5f7',
+    surface:     dark ? '#1a1d27' : '#ffffff',
+    surfaceAlt:  dark ? '#22263a' : '#f0f0f5',
+    border:      dark ? '#2e3250' : '#e4e4e9',
+    text:        dark ? '#e8eaf0' : '#1a1a2e',
+    textMuted:   dark ? '#7a7f9a' : '#8888a0',
+    accent:      dark ? '#7c6af7' : '#5b4fcf',
+    accentSoft:  dark ? '#2a2550' : '#ede9ff',
+    accentText:  dark ? '#b0a8ff' : '#5b4fcf',
+    userBubble:  dark ? '#3d3580' : '#5b4fcf',
+    userText:    '#ffffff',
+    aiBubble:    dark ? '#22263a' : '#f0f0f5',
+    aiText:      dark ? '#e8eaf0' : '#1a1a2e',
+    inputBg:     dark ? '#22263a' : '#f7f7fa',
+    inputBorder: dark ? '#3a3f5c' : '#dddde8',
+    tagBg:       dark ? '#2a2550' : '#ede9ff',
+    tagText:     dark ? '#b0a8ff' : '#5b4fcf',
+    sourceBg:    dark ? '#1e2235' : '#faf9ff',
+    sourceBorder:dark ? '#35396e' : '#ddd8ff',
+  };
 
   return (
-    <div className="space-y-6 h-[calc(100vh-12rem)]">
+    <div style={{
+      display: 'flex',
+      flexDirection: 'column',
+      height: 'calc(100vh - 6rem)',
+      background: t.bg,
+      borderRadius: '16px',
+      overflow: 'hidden',
+      fontFamily: "'DM Sans', 'Segoe UI', sans-serif",
+      transition: 'background 0.3s ease'
+    }}>
+
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-            <Sparkles className="w-6 h-6 text-purple-600" />
-            AI Assistant
-          </h1>
-          <p className="text-gray-600">Ask me anything about student feedback</p>
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        padding: '18px 24px',
+        borderBottom: `1px solid ${t.border}`,
+        background: t.surface,
+        transition: 'background 0.3s ease, border-color 0.3s ease'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div style={{
+            width: '38px', height: '38px',
+            borderRadius: '12px',
+            background: t.accentSoft,
+            display: 'flex', alignItems: 'center', justifyContent: 'center'
+          }}>
+            <Sparkles size={18} color={t.accentText} />
+          </div>
+          <div>
+            <h2 style={{ margin: 0, fontSize: '16px', fontWeight: 700, color: t.text, letterSpacing: '-0.3px' }}>
+              AI Feedback Assistant
+            </h2>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '5px', marginTop: '2px' }}>
+              <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#22c55e' }} />
+              <span style={{ fontSize: '11px', color: t.textMuted }}>Powered by Ollama · phi3</span>
+            </div>
+          </div>
         </div>
-        <button
-          onClick={() => setMessages([{
-            id: 0,
-            role: 'assistant',
-            text: 'Hello! I\'m your AI assistant. How can I help you today?',
-            timestamp: new Date()
-          }])}
-          className="flex items-center gap-2 text-gray-600 hover:text-gray-900"
-        >
-          <RefreshCw className="w-4 h-4" />
-          New Chat
-        </button>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          {/* Dark mode toggle */}
+          <button
+            onClick={() => setDark(!dark)}
+            title={dark ? 'Switch to light mode' : 'Switch to dark mode'}
+            style={{
+              display: 'flex', alignItems: 'center', gap: '6px',
+              padding: '7px 14px',
+              borderRadius: '20px',
+              border: `1px solid ${t.border}`,
+              background: t.surfaceAlt,
+              color: t.textMuted,
+              cursor: 'pointer',
+              fontSize: '12px',
+              fontWeight: 500,
+              transition: 'all 0.2s ease'
+            }}
+          >
+            {dark ? <Sun size={13} /> : <Moon size={13} />}
+            {dark ? 'Light' : 'Dark'}
+          </button>
+
+          {/* New chat */}
+          <button
+            onClick={handleReset}
+            style={{
+              display: 'flex', alignItems: 'center', gap: '6px',
+              padding: '7px 14px',
+              borderRadius: '20px',
+              border: `1px solid ${t.border}`,
+              background: t.surfaceAlt,
+              color: t.textMuted,
+              cursor: 'pointer',
+              fontSize: '12px',
+              fontWeight: 500,
+              transition: 'all 0.2s ease'
+            }}
+          >
+            <RefreshCw size={13} />
+            New chat
+          </button>
+        </div>
       </div>
 
-      {/* Chat Container */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 flex flex-col h-full">
-        {/* Messages */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-4">
-          {messages.map((message) => (
-            <div
-              key={message.id}
-              className={`flex gap-4 ${message.role === 'user' ? 'flex-row-reverse' : ''}`}
-            >
-              <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${
-                message.role === 'assistant' ? 'bg-purple-100' : 'bg-primary-100'
-              }`}>
-                {message.role === 'assistant' ? (
-                  <Bot className="w-5 h-5 text-purple-600" />
-                ) : (
-                  <User className="w-5 h-5 text-primary-600" />
-                )}
-              </div>
-              <div className={`max-w-[70%] ${message.role === 'user' ? 'text-right' : ''}`}>
-                <div className={`rounded-2xl px-4 py-3 ${
-                  message.role === 'assistant' 
-                    ? 'bg-gray-100 text-gray-900' 
-                    : 'bg-primary-600 text-white'
-                }`}>
-                  <p className="whitespace-pre-wrap text-sm">{message.text}</p>
-                </div>
-                <p className="text-xs text-gray-500 mt-1">
-                  {message.timestamp.toLocaleTimeString()}
-                </p>
-              </div>
-            </div>
-          ))}
-          
-          {loading && (
-            <div className="flex gap-4">
-              <div className="w-10 h-10 rounded-full bg-purple-100 flex items-center justify-center">
-                <Bot className="w-5 h-5 text-purple-600" />
-              </div>
-              <div className="bg-gray-100 rounded-2xl px-4 py-3">
-                <div className="flex gap-1">
-                  <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></span>
-                  <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></span>
-                  <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></span>
-                </div>
-              </div>
-            </div>
-          )}
-          
-          <div ref={messagesEndRef} />
-        </div>
+      {/* Messages */}
+      <div style={{
+        flex: 1,
+        overflowY: 'auto',
+        padding: '24px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '20px',
+        background: t.bg,
+        transition: 'background 0.3s ease'
+      }}>
 
-        {/* Suggested Questions */}
-        {messages.length <= 2 && (
-          <div className="px-6 pb-4">
-            <p className="text-sm text-gray-500 mb-2">Suggested questions:</p>
-            <div className="flex flex-wrap gap-2">
+        {/* Suggested questions - only at start */}
+        {messages.length <= 1 && (
+          <div style={{
+            background: t.surface,
+            border: `1px solid ${t.border}`,
+            borderRadius: '16px',
+            padding: '20px',
+            transition: 'all 0.3s ease'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px' }}>
+              <Zap size={14} color={t.accentText} />
+              <span style={{ fontSize: '12px', fontWeight: 600, color: t.textMuted, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                Quick questions
+              </span>
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
               {suggestedQuestions.map((q, i) => (
                 <button
                   key={i}
-                  onClick={() => { setInput(q); }}
-                  className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm rounded-full transition-colors"
+                  onClick={() => setInput(q)}
+                  style={{
+                    padding: '7px 14px',
+                    borderRadius: '20px',
+                    border: `1px solid ${t.border}`,
+                    background: t.tagBg,
+                    color: t.tagText,
+                    fontSize: '12px',
+                    fontWeight: 500,
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease'
+                  }}
                 >
                   {q}
                 </button>
@@ -178,27 +230,191 @@ const ChatWithAI = () => {
           </div>
         )}
 
-        {/* Input */}
-        <div className="border-t border-gray-100 p-4">
-          <div className="flex gap-3">
-            <textarea
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyPress={handleKeyPress}
-              placeholder="Ask about feedback..."
-              rows={1}
-              className="flex-1 border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none resize-none"
-            />
-            <button
-              onClick={handleSend}
-              disabled={!input.trim() || loading}
-              className="bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <Send className="w-5 h-5" />
-            </button>
+        {/* Message bubbles */}
+        {messages.map((message) => (
+          <div key={message.id} style={{
+            display: 'flex',
+            flexDirection: message.role === 'user' ? 'row-reverse' : 'row',
+            gap: '12px',
+            alignItems: 'flex-start'
+          }}>
+
+            {/* Avatar */}
+            <div style={{
+              width: '34px', height: '34px',
+              borderRadius: '10px',
+              background: message.role === 'assistant' ? t.accentSoft : t.userBubble,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              flexShrink: 0
+            }}>
+              {message.role === 'assistant'
+                ? <Bot size={16} color={t.accentText} />
+                : <User size={16} color="#fff" />
+              }
+            </div>
+
+            {/* Bubble + sources */}
+            <div style={{
+              maxWidth: '72%',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '8px',
+              alignItems: message.role === 'user' ? 'flex-end' : 'flex-start'
+            }}>
+              <div style={{
+                padding: '12px 16px',
+                borderRadius: message.role === 'user' ? '18px 4px 18px 18px' : '4px 18px 18px 18px',
+                background: message.role === 'user' ? t.userBubble : t.aiBubble,
+                color: message.role === 'user' ? t.userText : t.aiText,
+                fontSize: '14px',
+                lineHeight: '1.6',
+                whiteSpace: 'pre-wrap',
+                boxShadow: dark ? 'none' : '0 1px 3px rgba(0,0,0,0.06)',
+                transition: 'background 0.3s ease'
+              }}>
+                {message.text}
+              </div>
+
+              {/* Sources panel */}
+              {message.sources && message.sources.length > 0 && (
+                <div style={{
+                  background: t.sourceBg,
+                  border: `1px solid ${t.sourceBorder}`,
+                  borderRadius: '12px',
+                  padding: '12px 16px',
+                  width: '100%',
+                  transition: 'all 0.3s ease'
+                }}>
+                  <p style={{ margin: '0 0 8px', fontSize: '11px', fontWeight: 600, color: t.accentText, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                    Based on {message.sources.length} feedback entries
+                  </p>
+                  {message.sources.map((source, i) => (
+                    <div key={i} style={{
+                      display: 'flex', gap: '8px',
+                      padding: '4px 0',
+                      borderTop: i > 0 ? `1px solid ${t.border}` : 'none'
+                    }}>
+                      <span style={{ fontSize: '11px', fontWeight: 700, color: t.accentText, flexShrink: 0 }}>{i + 1}.</span>
+                      <span style={{ fontSize: '12px', color: t.textMuted, lineHeight: '1.5' }}>{source}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <span style={{ fontSize: '10px', color: t.textMuted, paddingLeft: '4px' }}>
+                {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              </span>
+            </div>
           </div>
-        </div>
+        ))}
+
+        {/* Typing indicator */}
+        {loading && (
+          <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
+            <div style={{
+              width: '34px', height: '34px',
+              borderRadius: '10px',
+              background: t.accentSoft,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              flexShrink: 0
+            }}>
+              <Bot size={16} color={t.accentText} />
+            </div>
+            <div style={{
+              padding: '14px 18px',
+              borderRadius: '4px 18px 18px 18px',
+              background: t.aiBubble,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '6px'
+            }}>
+              <span style={{ fontSize: '11px', color: t.textMuted }}>Analyzing feedback...</span>
+              <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                {[0, 1, 2].map(i => (
+                  <div key={i} style={{
+                    width: '7px', height: '7px',
+                    borderRadius: '50%',
+                    background: t.accentText,
+                    animation: 'bounce 1.2s infinite',
+                    animationDelay: `${i * 0.2}s`,
+                    opacity: 0.7
+                  }} />
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div ref={messagesEndRef} />
       </div>
+
+      {/* Input area */}
+      <div style={{
+        padding: '16px 24px 20px',
+        borderTop: `1px solid ${t.border}`,
+        background: t.surface,
+        transition: 'all 0.3s ease'
+      }}>
+        <div style={{
+          display: 'flex',
+          gap: '10px',
+          alignItems: 'flex-end',
+          background: t.inputBg,
+          border: `1px solid ${t.inputBorder}`,
+          borderRadius: '14px',
+          padding: '10px 10px 10px 16px',
+          transition: 'all 0.2s ease'
+        }}>
+          <textarea
+            ref={textareaRef}
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyPress={handleKeyPress}
+            placeholder="Ask about student feedback... (Enter to send)"
+            rows={1}
+            disabled={loading}
+            style={{
+              flex: 1,
+              border: 'none',
+              outline: 'none',
+              background: 'transparent',
+              color: t.text,
+              fontSize: '14px',
+              lineHeight: '1.5',
+              resize: 'none',
+              fontFamily: 'inherit',
+              opacity: loading ? 0.5 : 1
+            }}
+          />
+          <button
+            onClick={handleSend}
+            disabled={!input.trim() || loading}
+            style={{
+              width: '36px', height: '36px',
+              borderRadius: '10px',
+              border: 'none',
+              background: (!input.trim() || loading) ? t.border : t.accent,
+              color: (!input.trim() || loading) ? t.textMuted : '#fff',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              cursor: (!input.trim() || loading) ? 'not-allowed' : 'pointer',
+              flexShrink: 0,
+              transition: 'all 0.2s ease'
+            }}
+          >
+            <Send size={15} />
+          </button>
+        </div>
+        <p style={{ margin: '8px 0 0', fontSize: '11px', color: t.textMuted, textAlign: 'center' }}>
+          Only answers questions related to student feedback
+        </p>
+      </div>
+
+      <style>{`
+        @keyframes bounce {
+          0%, 60%, 100% { transform: translateY(0); }
+          30% { transform: translateY(-5px); }
+        }
+      `}</style>
     </div>
   );
 };

@@ -1,58 +1,131 @@
-import { Calendar, Check } from 'lucide-react';
+import { Calendar, Clock } from 'lucide-react';
+
+const filters = [
+  { key: 'all',      label: 'All Time',     short: 'All',  icon: '∞' },
+  { key: '7days',    label: 'Last 7 Days',  short: '7d',   icon: '7' },
+  { key: '30days',   label: 'Last 30 Days', short: '30d',  icon: '30' },
+  { key: 'semester', label: 'Semester',     short: 'Sem',  icon: '◑' },
+];
 
 const DateFilters = ({ currentFilter, onFilterChange }) => {
-  const filters = [
-    { key: 'all', label: 'All Time' },
-    { key: '7days', label: 'Last 7 Days' },
-    { key: '30days', label: 'Last 30 Days' },
-    { key: 'semester', label: 'Last Semester' }
-  ];
+  const active = filters.find(f => f.key === currentFilter) || filters[0];
 
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 h-full flex flex-col">
-      {/* Header Section */}
-      <div className="flex items-center gap-3 mb-6">
-        <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-100 shadow-sm">
-          <Calendar className="w-5 h-5 text-slate-600" />
+    <div style={{
+      background: 'linear-gradient(135deg, #4f46e5 0%, #6366f1 50%, #818cf8 100%)',
+      borderRadius: '16px',
+      padding: '20px 22px',
+      height: '100%',
+      display: 'flex',
+      flexDirection: 'column',
+      gap: '16px',
+      position: 'relative',
+      overflow: 'hidden'
+    }}>
+
+      {/* Decorative background circles */}
+      <div style={{
+        position: 'absolute', top: '-20px', right: '-20px',
+        width: '100px', height: '100px',
+        borderRadius: '50%',
+        background: 'rgba(255,255,255,0.08)',
+        pointerEvents: 'none'
+      }} />
+      <div style={{
+        position: 'absolute', bottom: '-30px', left: '30px',
+        width: '80px', height: '80px',
+        borderRadius: '50%',
+        background: 'rgba(255,255,255,0.05)',
+        pointerEvents: 'none'
+      }} />
+
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', position: 'relative' }}>
+        <div style={{
+          width: '34px', height: '34px',
+          borderRadius: '10px',
+          background: 'rgba(255,255,255,0.2)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          flexShrink: 0,
+          backdropFilter: 'blur(4px)'
+        }}>
+          <Calendar size={15} color="#fff" />
         </div>
-        <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider">
-          Time Period
-        </h3>
+        <div>
+          <p style={{ fontSize: '13px', fontWeight: 700, color: '#fff', margin: 0 }}>
+            Time Period
+          </p>
+          <p style={{ fontSize: '11px', color: 'rgba(255,255,255,0.65)', margin: 0 }}>
+            Filter feedback by date
+          </p>
+        </div>
       </div>
-      
-      {/* Filter Buttons - Styled as modern Pills */}
-      <div className="flex flex-wrap gap-2.5">
+
+      {/* Filter buttons */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(4, 1fr)',
+        background: 'rgba(0,0,0,0.15)',
+        borderRadius: '12px',
+        padding: '4px',
+        gap: '3px',
+        position: 'relative'
+      }}>
         {filters.map((filter) => {
           const isActive = currentFilter === filter.key;
           return (
             <button
               key={filter.key}
               onClick={() => onFilterChange(filter.key)}
-              className={`
-                relative px-4 py-2 rounded-xl text-sm font-semibold transition-all duration-200 
-                flex items-center gap-2
-                ${isActive
-                  ? 'bg-slate-900 text-white shadow-lg shadow-slate-300/50' // Dark active state (or change to bg-blue-600)
-                  : 'bg-slate-50 text-slate-500 hover:bg-white hover:text-slate-700 hover:shadow-md border border-transparent hover:border-slate-200'
-                }
-              `}
+              title={filter.label}
+              style={{
+                padding: '9px 4px',
+                borderRadius: '9px',
+                border: 'none',
+                background: isActive ? '#fff' : 'transparent',
+                color: isActive ? '#4f46e5' : 'rgba(255,255,255,0.7)',
+                fontSize: '12px',
+                fontWeight: isActive ? 800 : 500,
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
+                boxShadow: isActive ? '0 2px 8px rgba(0,0,0,0.15)' : 'none',
+              }}
             >
-              {isActive && <Check className="w-3.5 h-3.5" />}
-              {filter.label}
+              {filter.short}
             </button>
           );
         })}
       </div>
 
-      {/* Footer Status */}
-      <div className="mt-auto pt-5 border-t border-slate-100 flex items-center justify-between">
-        <span className="text-xs font-medium text-slate-400">Filtering by</span>
-        <div className="bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-100">
-          <span className="text-xs font-bold text-slate-700">
-            {filters.find(f => f.key === currentFilter)?.label}
+      {/* Active label */}
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingTop: '12px',
+        borderTop: '1px solid rgba(255,255,255,0.15)',
+        marginTop: 'auto',
+        position: 'relative'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+          <Clock size={11} color="rgba(255,255,255,0.6)" />
+          <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.6)' }}>
+            Showing
           </span>
         </div>
+        <span style={{
+          fontSize: '11px',
+          fontWeight: 700,
+          color: '#4f46e5',
+          background: '#fff',
+          padding: '3px 12px',
+          borderRadius: '20px',
+          boxShadow: '0 1px 4px rgba(0,0,0,0.1)'
+        }}>
+          {active.label}
+        </span>
       </div>
+
     </div>
   );
 };

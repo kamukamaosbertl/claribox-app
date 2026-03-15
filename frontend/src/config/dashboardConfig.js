@@ -10,4 +10,5 @@ export const dashboardConfig = {
   // Specific Charts
   showCategoryChart: true,
   showTimeline: true,
+  showSentimentAnalysis: true,
 };

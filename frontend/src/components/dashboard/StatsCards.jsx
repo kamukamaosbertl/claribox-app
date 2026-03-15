@@ -1,96 +1,211 @@
-import { MessageSquare, CheckCircle, ArrowRight } from 'lucide-react';
+import { MessageSquare, CheckCircle, ArrowRight, TrendingUp } from 'lucide-react';
 
 const StatsCards = ({ stats, type = 'all', onResolvedClick }) => {
-  // 1. Improved Loading State
+
   if (!stats) {
     return (
-      <div className="w-full h-32 bg-gray-50 border-2 border-dashed border-gray-200 rounded-2xl flex flex-col items-center justify-center gap-2 animate-pulse">
-        <MessageSquare className="w-6 h-6 text-gray-300" />
-        <span className="text-xs text-gray-400 font-medium">Loading data...</span>
+      <div style={{
+        height: '140px',
+        borderRadius: '16px',
+        background: 'linear-gradient(135deg, #f8f8fc 0%, #eef2ff 100%)',
+        border: '2px dashed #c7d2fe',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: '8px',
+        animation: 'pulse 2s infinite'
+      }}>
+        <MessageSquare size={20} color="#a5b4fc" />
+        <span style={{ fontSize: '12px', color: '#a5b4fc', fontWeight: 500 }}>Loading...</span>
       </div>
     );
   }
 
-  // Helper calculation
-  const resolvedPercent = stats.total > 0 
-    ? Math.round((stats.resolved / stats.total) * 100) 
+  const resolvedPercent = stats.total > 0
+    ? Math.round((stats.resolved / stats.total) * 100)
     : 0;
 
-  // --- TYPE: RESOLVED ---
+  const pendingPercent = stats.total > 0
+    ? Math.round((stats.pending / stats.total) * 100)
+    : 0;
+
+  /* ---- RESOLVED CARD ---- */
   if (type === 'resolved') {
     return (
-      <div 
-        onClick={onResolvedClick} 
-        className="group relative bg-white rounded-2xl p-6 border border-slate-100 shadow-sm hover:shadow-xl hover:-translate-y-1.5 transition-all duration-300 cursor-pointer overflow-hidden"
+      <div
+        onClick={onResolvedClick}
+        style={{
+          position: 'relative',
+          borderRadius: '16px',
+          padding: '20px',
+          background: 'linear-gradient(135deg, #059669 0%, #10b981 60%, #34d399 100%)',
+          boxShadow: '0 4px 20px rgba(16,185,129,0.3)',
+          cursor: 'pointer',
+          overflow: 'hidden',
+          transition: 'transform 0.2s ease, box-shadow 0.2s ease',
+          height: '100%'
+        }}
+        onMouseEnter={e => {
+          e.currentTarget.style.transform = 'translateY(-3px)';
+          e.currentTarget.style.boxShadow = '0 8px 28px rgba(16,185,129,0.4)';
+        }}
+        onMouseLeave={e => {
+          e.currentTarget.style.transform = 'translateY(0)';
+          e.currentTarget.style.boxShadow = '0 4px 20px rgba(16,185,129,0.3)';
+        }}
       >
-        {/* Decorative Background Glow (Green) */}
-        <div className="absolute top-0 right-0 w-32 h-32 bg-green-50 rounded-full blur-3xl -mr-10 -mt-10 group-hover:bg-green-100 transition-colors duration-500"></div>
+        {/* Decorative circles */}
+        <div style={{
+          position: 'absolute', top: '-15px', right: '-15px',
+          width: '80px', height: '80px', borderRadius: '50%',
+          background: 'rgba(255,255,255,0.12)', pointerEvents: 'none'
+        }} />
+        <div style={{
+          position: 'absolute', bottom: '-20px', left: '20px',
+          width: '60px', height: '60px', borderRadius: '50%',
+          background: 'rgba(255,255,255,0.08)', pointerEvents: 'none'
+        }} />
 
-        <div className="relative z-10 flex flex-col">
-          <div className="flex justify-between items-start mb-4">
+        <div style={{ position: 'relative', zIndex: 1 }}>
+          {/* Top row */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
             <div>
-              {/* Label with Badge style */}
-              <div className="flex items-center gap-2 mb-1">
-                <span className="text-sm font-bold text-slate-800">{stats.resolved || 0}</span>
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-green-100 text-green-700 border border-green-200">
+              <p style={{ fontSize: '11px', fontWeight: 700, color: 'rgba(255,255,255,0.75)', margin: '0 0 6px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                Resolved Issues
+              </p>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
+                <h3 style={{ fontSize: '32px', fontWeight: 800, color: '#fff', margin: 0, lineHeight: 1 }}>
+                  {stats.resolved || 0}
+                </h3>
+                <span style={{
+                  fontSize: '11px', fontWeight: 700,
+                  background: 'rgba(255,255,255,0.25)',
+                  color: '#fff',
+                  padding: '2px 8px',
+                  borderRadius: '20px'
+                }}>
                   {resolvedPercent}%
                 </span>
               </div>
-              <p className="text-xs font-medium text-slate-400 uppercase tracking-wide">Resolved Issues</p>
             </div>
-            
-            {/* Icon Container with Gradient */}
-            <div className="w-12 h-12 bg-gradient-to-br from-emerald-400 to-green-600 rounded-xl flex items-center justify-center shadow-lg shadow-green-200">
-              <CheckCircle className="w-6 h-6 text-white" />
+            <div style={{
+              width: '42px', height: '42px',
+              borderRadius: '12px',
+              background: 'rgba(255,255,255,0.2)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center'
+            }}>
+              <CheckCircle size={20} color="#fff" />
             </div>
           </div>
 
-          {/* Progress Bar */}
-          <div className="mt-auto">
-            <div className="flex justify-between items-end mb-1.5">
-              <span className="text-xs font-medium text-slate-400">Resolution Rate</span>
+          {/* Progress bar */}
+          <div>
+            <div style={{
+              height: '6px',
+              background: 'rgba(255,255,255,0.25)',
+              borderRadius: '6px',
+              overflow: 'hidden',
+              marginBottom: '6px'
+            }}>
+              <div style={{
+                height: '100%',
+                width: `${resolvedPercent}%`,
+                background: '#fff',
+                borderRadius: '6px',
+                transition: 'width 1s ease'
+              }} />
             </div>
-            <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
-              <div 
-                className="bg-gradient-to-r from-emerald-400 to-green-500 h-full rounded-full transition-all duration-1000 ease-out" 
-                style={{ width: `${resolvedPercent}%` }}
-              ></div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.7)' }}>
+                Resolution rate
+              </span>
+              <ArrowRight size={13} color="rgba(255,255,255,0.8)" />
             </div>
           </div>
-        </div>
-
-        {/* Hover Action Arrow (Visible on Hover) */}
-        <div className="absolute bottom-6 right-6 opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-300">
-          <ArrowRight className="w-5 h-5 text-green-600" />
         </div>
       </div>
     );
   }
 
-  // --- TYPE: TOTAL (Default) ---
+  /* ---- TOTAL CARD (default) ---- */
   return (
-    <div className="group relative bg-white rounded-2xl p-6 border border-slate-100 shadow-sm hover:shadow-xl hover:-translate-y-1.5 transition-all duration-300">
-      {/* Decorative Background Glow (Blue) */}
-      <div className="absolute top-0 right-0 w-32 h-32 bg-blue-50 rounded-full blur-3xl -mr-10 -mt-10 group-hover:bg-blue-100 transition-colors duration-500"></div>
+    <div
+      style={{
+        position: 'relative',
+        borderRadius: '16px',
+        padding: '20px',
+        background: 'linear-gradient(135deg, #4f46e5 0%, #6366f1 60%, #818cf8 100%)',
+        boxShadow: '0 4px 20px rgba(99,102,241,0.3)',
+        overflow: 'hidden',
+        transition: 'transform 0.2s ease, box-shadow 0.2s ease',
+        height: '100%'
+      }}
+      onMouseEnter={e => {
+        e.currentTarget.style.transform = 'translateY(-3px)';
+        e.currentTarget.style.boxShadow = '0 8px 28px rgba(99,102,241,0.4)';
+      }}
+      onMouseLeave={e => {
+        e.currentTarget.style.transform = 'translateY(0)';
+        e.currentTarget.style.boxShadow = '0 4px 20px rgba(99,102,241,0.3)';
+      }}
+    >
+      {/* Decorative circles */}
+      <div style={{
+        position: 'absolute', top: '-15px', right: '-15px',
+        width: '90px', height: '90px', borderRadius: '50%',
+        background: 'rgba(255,255,255,0.1)', pointerEvents: 'none'
+      }} />
+      <div style={{
+        position: 'absolute', bottom: '-25px', left: '10px',
+        width: '70px', height: '70px', borderRadius: '50%',
+        background: 'rgba(255,255,255,0.06)', pointerEvents: 'none'
+      }} />
 
-      <div className="relative z-10 flex flex-col h-full">
-        <div className="flex justify-between items-start mb-2">
+      <div style={{ position: 'relative', zIndex: 1 }}>
+        {/* Top row */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
           <div>
-             <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Total Feedback</p>
-             <h3 className="text-3xl font-extrabold text-slate-800 tracking-tight">{stats.total || 0}</h3>
+            <p style={{ fontSize: '11px', fontWeight: 700, color: 'rgba(255,255,255,0.75)', margin: '0 0 6px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+              Total Feedback
+            </p>
+            <h3 style={{ fontSize: '32px', fontWeight: 800, color: '#fff', margin: 0, lineHeight: 1 }}>
+              {stats.total || 0}
+            </h3>
           </div>
-          
-          {/* Icon Container with Gradient */}
-          <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-200">
-            <MessageSquare className="w-6 h-6 text-white" />
+          <div style={{
+            width: '42px', height: '42px',
+            borderRadius: '12px',
+            background: 'rgba(255,255,255,0.2)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center'
+          }}>
+            <MessageSquare size={20} color="#fff" />
           </div>
         </div>
 
-        <div className="mt-auto pt-4 flex items-center gap-2 text-slate-500">
-           <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-slate-100 group-hover:bg-blue-100 group-hover:text-blue-600 transition-colors">
-              <MessageSquare className="w-3 h-3" />
-           </span>
-           <span className="text-xs font-medium">All submissions</span>
+        {/* Bottom row - pending info */}
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          paddingTop: '12px',
+          borderTop: '1px solid rgba(255,255,255,0.2)'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <TrendingUp size={13} color="rgba(255,255,255,0.8)" />
+            <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.8)' }}>
+              {stats.pending || 0} pending review
+            </span>
+          </div>
+          <span style={{
+            fontSize: '10px', fontWeight: 700,
+            background: 'rgba(255,255,255,0.2)',
+            color: '#fff',
+            padding: '2px 8px',
+            borderRadius: '20px'
+          }}>
+            {pendingPercent}% pending
+          </span>
         </div>
       </div>
     </div>

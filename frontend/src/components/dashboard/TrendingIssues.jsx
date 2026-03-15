@@ -1,62 +1,184 @@
 import { TrendingUp, TrendingDown, Minus, BarChart3 } from 'lucide-react';
 
+const RANK_COLORS = ['#f59e0b', '#94a3b8', '#cd7c2f', '#6366f1', '#6366f1'];
+const RANK_LABELS = ['🥇', '🥈', '🥉', '4', '5'];
+
 const TrendingIssues = ({ trends }) => {
+  const max = trends && trends.length > 0
+    ? Math.max(...trends.map(t => t.count || 0))
+    : 1;
+
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-slate-100 h-full flex flex-col">
-      {/* Header */}
-      <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between bg-white">
-        <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-          <div className="p-1.5 bg-indigo-50 rounded-lg">
-            <TrendingUp className="w-4 h-4 text-indigo-600" />
+    <div style={{
+      background: '#fff',
+      borderRadius: '16px',
+      border: '1px solid #f0f0f5',
+      boxShadow: '0 1px 4px rgba(0,0,0,0.04)',
+      overflow: 'hidden',
+      display: 'flex',
+      flexDirection: 'column',
+      height: '100%'
+    }}>
+
+      {/* Header - indigo gradient */}
+      <div style={{
+        background: 'linear-gradient(135deg, #4f46e5 0%, #6366f1 100%)',
+        padding: '18px 22px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        position: 'relative',
+        overflow: 'hidden'
+      }}>
+        <div style={{
+          position: 'absolute', top: '-15px', right: '-15px',
+          width: '80px', height: '80px', borderRadius: '50%',
+          background: 'rgba(255,255,255,0.08)', pointerEvents: 'none'
+        }} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', position: 'relative' }}>
+          <div style={{
+            width: '32px', height: '32px', borderRadius: '9px',
+            background: 'rgba(255,255,255,0.2)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center'
+          }}>
+            <TrendingUp size={15} color="#fff" />
           </div>
-          Trending Issues
-        </h2>
+          <div>
+            <h2 style={{ fontSize: '14px', fontWeight: 700, color: '#fff', margin: 0 }}>
+              Trending Issues
+            </h2>
+            <p style={{ fontSize: '11px', color: 'rgba(255,255,255,0.65)', margin: 0 }}>
+              Most reported problems
+            </p>
+          </div>
+        </div>
+        {trends && trends.length > 0 && (
+          <span style={{
+            fontSize: '11px', fontWeight: 700,
+            background: 'rgba(255,255,255,0.2)',
+            color: '#fff', padding: '3px 10px',
+            borderRadius: '20px'
+          }}>
+            {trends.length} issues
+          </span>
+        )}
       </div>
-      
+
       {/* Content */}
       {trends && trends.length > 0 ? (
-        <div className="p-4 space-y-2">
-          {trends.map((trend, index) => (
-            <div 
-              key={index} 
-              className="group flex items-center justify-between p-4 bg-slate-50 rounded-xl hover:bg-white hover:shadow-md hover:border-slate-100 border border-transparent transition-all duration-200 cursor-pointer"
-            >
-              <div className="flex-1">
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="text-xs font-bold text-slate-400 uppercase">#{index + 1}</span>
-                  <p className="font-semibold text-slate-800 group-hover:text-indigo-600 transition-colors">
-                    {trend.title}
-                  </p>
+        <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '10px', flex: 1 }}>
+          {trends.map((trend, index) => {
+            const pct = max > 0 ? Math.round((trend.count / max) * 100) : 0;
+            const isRising = trend.trend === 'up';
+            const isFalling = trend.trend === 'down';
+
+            return (
+              <div
+                key={index}
+                style={{
+                  padding: '14px 16px',
+                  borderRadius: '12px',
+                  background: index === 0 ? '#fefce8' : '#fafafa',
+                  border: index === 0 ? '1px solid #fde68a' : '1px solid #f0f0f5',
+                  transition: 'all 0.2s ease',
+                  cursor: 'pointer'
+                }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.background = '#eef2ff';
+                  e.currentTarget.style.borderColor = '#c7d2fe';
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.background = index === 0 ? '#fefce8' : '#fafafa';
+                  e.currentTarget.style.borderColor = index === 0 ? '#fde68a' : '#f0f0f5';
+                }}
+              >
+                {/* Top row */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    {/* Rank */}
+                    <span style={{
+                      fontSize: index < 3 ? '16px' : '11px',
+                      fontWeight: 800,
+                      color: index < 3 ? undefined : RANK_COLORS[index],
+                      minWidth: '20px',
+                      textAlign: 'center'
+                    }}>
+                      {RANK_LABELS[index] || `#${index + 1}`}
+                    </span>
+                    <p style={{
+                      fontSize: '13px', fontWeight: 700,
+                      color: '#1e1b4b', margin: 0
+                    }}>
+                      {trend.title}
+                    </p>
+                  </div>
+
+                  {/* Trend badge */}
+                  <div style={{
+                    display: 'flex', alignItems: 'center', gap: '4px',
+                    padding: '3px 9px', borderRadius: '20px',
+                    fontSize: '11px', fontWeight: 700,
+                    background: isRising ? '#fff1f2' : isFalling ? '#f0fdf4' : '#f8fafc',
+                    color: isRising ? '#be123c' : isFalling ? '#15803d' : '#64748b',
+                    border: `1px solid ${isRising ? '#fecdd3' : isFalling ? '#bbf7d0' : '#e2e8f0'}`
+                  }}>
+                    {isRising && <TrendingUp size={11} />}
+                    {isFalling && <TrendingDown size={11} />}
+                    {!isRising && !isFalling && <Minus size={11} />}
+                    {isRising ? 'Rising' : isFalling ? 'Falling' : 'Stable'}
+                  </div>
                 </div>
-                <p className="text-xs text-slate-500 font-medium ml-6">
-                  {trend.count} mentions
-                </p>
+
+                {/* Progress bar + count */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <div style={{
+                    flex: 1, height: '5px',
+                    background: '#e5e7eb',
+                    borderRadius: '5px', overflow: 'hidden'
+                  }}>
+                    <div style={{
+                      height: '100%',
+                      width: `${pct}%`,
+                      background: index === 0
+                        ? 'linear-gradient(90deg, #f59e0b, #fbbf24)'
+                        : 'linear-gradient(90deg, #6366f1, #818cf8)',
+                      borderRadius: '5px',
+                      transition: 'width 0.8s ease'
+                    }} />
+                  </div>
+                  <span style={{
+                    fontSize: '11px', fontWeight: 700,
+                    color: '#6b7280', minWidth: '60px', textAlign: 'right'
+                  }}>
+                    {trend.count} mentions
+                  </span>
+                </div>
               </div>
-              
-              {/* Trend Badge */}
-              <div className={`
-                flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold border
-                ${trend.trend === 'up' ? 'bg-red-50 text-red-600 border-red-100' : 
-                  trend.trend === 'down' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 
-                  'bg-slate-100 text-slate-600 border-slate-200'}
-              `}>
-                {trend.trend === 'up' ? <TrendingUp className="w-3 h-3" /> : 
-                 trend.trend === 'down' ? <TrendingDown className="w-3 h-3" /> : 
-                 <Minus className="w-3 h-3" />}
-                {trend.trend === 'up' ? 'Rising' : 
-                 trend.trend === 'down' ? 'Falling' : 'Stable'}
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       ) : (
-        /* Empty State */
-        <div className="flex flex-col items-center justify-center h-64 bg-slate-50/30 text-center p-6">
-          <div className="w-14 h-14 bg-slate-100 rounded-full flex items-center justify-center mb-3">
-            <BarChart3 className="w-7 h-7 text-slate-300" />
+        /* Empty state */
+        <div style={{
+          flex: 1,
+          display: 'flex', flexDirection: 'column',
+          alignItems: 'center', justifyContent: 'center',
+          padding: '40px 24px', gap: '12px',
+          background: '#fafafa'
+        }}>
+          <div style={{
+            width: '52px', height: '52px', borderRadius: '50%',
+            background: '#eef2ff',
+            display: 'flex', alignItems: 'center', justifyContent: 'center'
+          }}>
+            <BarChart3 size={22} color="#6366f1" />
           </div>
-          <p className="text-slate-600 font-medium">No trending issues</p>
-          <p className="text-slate-400 text-sm mt-1">Check back later for updates</p>
+          <p style={{ fontSize: '14px', fontWeight: 600, color: '#374151', margin: 0 }}>
+            No trending issues
+          </p>
+          <p style={{ fontSize: '12px', color: '#9ca3af', margin: 0, textAlign: 'center' }}>
+            Issues will appear here as feedback grows.
+          </p>
         </div>
       )}
     </div>
