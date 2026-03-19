@@ -7,7 +7,7 @@ const api = axios.create({
   headers: { 'Content-Type': 'application/json' },
 });
 
-// Add token to requests if available
+// ── Request interceptor — attach token to every request ──────────────────────
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('adminToken');
   if (token) {
@@ -15,6 +15,27 @@ api.interceptors.request.use((config) => {
   }
   return config;
 });
+
+// ── Response interceptor — handle session expiry ──────────────────────────────
+// If backend returns 401 (unauthorized / token expired):
+// 1. Clear stored credentials
+// 2. Redirect to login with a message
+api.interceptors.response.use(
+  (response) => response, // pass through successful responses
+  (error) => {
+    if (error.response?.status === 401) {
+      // Only redirect if we were actually logged in
+      const token = localStorage.getItem('adminToken');
+      if (token) {
+        localStorage.removeItem('adminToken');
+        localStorage.removeItem('adminUser');
+        // Redirect to login with session expired message
+        window.location.href = '/admin/login?session=expired';
+      }
+    }
+    return Promise.reject(error);
+  }
+);
 
 /* ============ STUDENT API ============ */
 export const studentAPI = {
@@ -39,12 +60,17 @@ export const studentAPI = {
 export const adminAPI = {
 
   /* --- Auth --- */
-  login:    (credentials) => api.post('/auth/login',    credentials),
-  register: (data)        => api.post('/auth/register', data),
+  login:       (credentials) => api.post('/auth/login',    credentials),
+  register:    (data)        => api.post('/auth/register', data),
+  googleLogin: (accessToken) => api.post('/auth/google',   { accessToken }),
   logout: () => {
     localStorage.removeItem('adminToken');
     localStorage.removeItem('adminUser');
   },
+
+  /* --- Profile --- */
+  getProfile:    ()     => api.get('/admin/profile'),
+  updateProfile: (data) => api.put('/admin/profile', data),
 
   /* --- Feedback Management --- */
   getAllFeedback: (filters = {}) => {
@@ -54,6 +80,7 @@ export const adminAPI = {
     if (filters.sort)     params.append('sort',      filters.sort);
     if (filters.limit)    params.append('limit',     filters.limit);
     if (filters.page)     params.append('page',      filters.page);
+    if (filters.filter)   params.append('filter',    filters.filter);
     return api.get(`/admin/feedback?${params.toString()}`);
   },
 
@@ -65,14 +92,15 @@ export const adminAPI = {
   getTimeStats:     (params = {}) => api.get('/admin/stats/time', { params }),
   getCategoryStats: (params = {}) => api.get('/admin/analytics',  { params }),
 
-  /* --- AI Chat & Summaries ---
-       These live in aiRoutes.js registered under /api/ai in server.js
-  ----------------------------------------- */
-  // Send admin question → RAG pipeline → Ollama answer
-  chatWithAI: (message, history) => api.post('/ai/chat', { message, history }),
+  /* --- AI Chat & Summaries --- */
+  chatWithAI: (message, history) => api.post('/ai/chat',        { message, history }),
+  getSummary: (id)               => api.get(`/ai/summary/${id}`),
 
-  // Generate or retrieve summary for a specific feedback (on demand, admin only)
-  getSummary: (id) => api.get(`/ai/summary/${id}`),
+  /* --- Notifications --- */
+  getNotifications:           ()   => api.get('/notifications'),
+  markNotificationRead:       (id) => api.patch(`/notifications/${id}/read`),
+  markAllNotificationsRead:   ()   => api.patch('/notifications/read-all'),
+  deleteNotification:         (id) => api.delete(`/notifications/${id}`),
 
   /* --- Resolution Management --- */
   getResolutions:   ()     => api.get('/admin/resolutions'),

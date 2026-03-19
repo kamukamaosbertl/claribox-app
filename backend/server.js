@@ -1,6 +1,9 @@
 // Load environment variables from .env file
 require('dotenv').config();
 
+// Import node-cron for scheduling the weekly email report
+const cron = require('node-cron');
+
 // Import Express.js framework for building the web server
 const express = require('express');
 
@@ -21,33 +24,74 @@ app.use(express.json());
 
 // Connect to MongoDB database using the URI from environment variables
 mongoose.connect(process.env.MONGODB_URI)
-  // Success callback: log when connection is established
   .then(() => console.log('✅ MongoDB Connected'))
-  // Error callback: log connection errors
   .catch(err => console.error('❌ MongoDB Error:', err.message));
 
-// Mount authentication routes at /api/auth
-app.use('/api/auth', require('./routes/authRoutes'));
+// ── Routes ────────────────────────────────────────────────────────────────────
 
-// Mount feedback routes at /api/feedback
-app.use('/api/feedback', require('./routes/feedbackRoutes'));
+// Authentication — register, login, Google OAuth
+app.use('/api/auth',          require('./routes/authRoutes'));
 
-// Mount admin routes at /api/admin
-app.use('/api/admin', require('./routes/adminRoutes'));
+// Student feedback submission
+app.use('/api/feedback',      require('./routes/feedbackRoutes'));
 
-// Mount AI-related routes at /api/ai
-app.use('/api/ai', require('./routes/aiRoutes'));
+// Admin dashboard — analytics, profile, resolutions
+app.use('/api/admin',         require('./routes/adminRoutes'));
 
-// Define a health check endpoint to verify the server is running
+// AI chat and summaries — RAG pipeline with Groq
+app.use('/api/ai',            require('./routes/aiRoutes'));
+
+// Notifications — bell icon alerts for admin
+app.use('/api/notifications', require('./routes/notificationRoutes'));
+
+// ── Weekly email report — every Monday at 8am ────────────────────────────────
+cron.schedule('0 8 * * 1', async () => {
+  console.log('⏰ Running weekly feedback report...');
+  const { generateAndSendWeeklyReport } = require('./services/weeklyReport');
+  await generateAndSendWeeklyReport();
+});
+
+// ── Inactivity reminder — every day at 9am ────────────────────────────────────
+// Checks if admin has not logged in for 3+ days
+// If so sends a reminder email with unread feedback count
+cron.schedule('0 9 * * *', async () => {
+  try {
+    const Admin    = require('./models/Admin');
+    const Feedback = require('./models/Feedback');
+    const { sendInactivityReminder } = require('./services/emailService');
+
+    // Find the most recently logged in admin
+    const admin = await Admin.findOne().sort({ lastLogin: -1 });
+    if (!admin || !admin.lastLogin) return;
+
+    // Check if last login was more than 3 days ago
+    const daysSinceLogin = (Date.now() - new Date(admin.lastLogin)) / (1000 * 60 * 60 * 24);
+
+    if (daysSinceLogin >= 3) {
+      // Count feedback from last 3 days
+      const since = new Date();
+      since.setDate(since.getDate() - 3);
+      const unreadCount = await Feedback.countDocuments({ createdAt: { $gte: since } });
+
+      // Only send if there is actually new feedback to check
+      if (unreadCount > 0) {
+        console.log(`Admin inactive for ${Math.floor(daysSinceLogin)} days — sending reminder`);
+        await sendInactivityReminder(unreadCount);
+      }
+    }
+  } catch (error) {
+    console.error('Inactivity check error:', error.message);
+  }
+});
+
+// ── Health check ──────────────────────────────────────────────────────────────
 app.get('/api/health', (req, res) => {
-  // Return a JSON response indicating the API is operational
   res.json({ status: 'ok', message: 'ClariBox API is running' });
 });
 
-// Get the port number from environment variables or default to 5000
-const PORT = process.env.PORT || 5000;
 
-// Start the Express server and listen on the specified port
-app.listen(PORT, () => {
+// ── Start server ──────────────────────────────────────────────────────────────
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Server running on port ${PORT}`);
 });

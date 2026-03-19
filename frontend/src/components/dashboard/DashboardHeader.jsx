@@ -30,7 +30,7 @@ const DashboardHeader = ({ lastUpdated, onRefresh, loading, admin }) => {
             <h1 className="text-4xl lg:text-5xl font-black bg-gradient-to-r from-slate-900 via-indigo-900 to-slate-900 bg-clip-text text-transparent drop-shadow-2xl leading-tight tracking-tight">
               {greeting()}, {admin?.name?.split(' ')[0] || 'Admin'}
             </h1>
-            <span className="text-2xl">👋</span>
+            <span className="text-2xl"></span>
           </div>
           
           <div className="flex flex-wrap items-center gap-3 text-sm">
