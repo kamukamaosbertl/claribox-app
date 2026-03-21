@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import {
   Loader2, Save, Bell, Lock, Globe,
-  AlertCircle, CheckCircle, Eye, EyeOff, KeyRound
+  AlertCircle, CheckCircle, Eye, EyeOff, KeyRound,
+  Share2, Copy, Link, MessageCircle
 } from 'lucide-react';
 import { adminAPI } from '../../services/api';
 
@@ -36,6 +37,12 @@ const Settings = () => {
   const [savingGeneral, setSavingGeneral] = useState(false);
   const [generalMsg,    setGeneralMsg]    = useState({ type: '', text: '' });
 
+  // ── Link generator state ──────────────────────────────────────────────────
+  // The feedback link is just the /submit page URL
+  // Generated dynamically based on current domain
+  const [linkCopied,    setLinkCopied]    = useState(false);
+  const feedbackLink = `${window.location.origin}/`;
+
   // ── Load preferences on mount ─────────────────────────────────────────────
   // Loads notification prefs from MongoDB — general prefs from localStorage
   useEffect(() => {
@@ -60,6 +67,32 @@ const Settings = () => {
   const showMsg = (setter, type, text) => {
     setter({ type, text });
     setTimeout(() => setter({ type: '', text: '' }), 3000);
+  };
+
+  // ── Copy feedback link to clipboard ──────────────────────────────────────────
+  const handleCopyLink = () => {
+    navigator.clipboard.writeText(feedbackLink);
+    setLinkCopied(true);
+    setTimeout(() => setLinkCopied(false), 2500);
+  };
+
+  // ── Share via WhatsApp ────────────────────────────────────────────────────────
+  const handleWhatsApp = () => {
+    const text = encodeURIComponent(
+      `Dear Student,\n\nWe value your feedback! Please use the link below to share your experience at our university.\n\n${feedbackLink}\n\nYour feedback is anonymous and helps us improve.`
+    );
+    window.open(`https://wa.me/?text=${text}`, '_blank');
+  };
+
+  // ── Share via Gmail ──────────────────────────────────────────────────────────
+  // Opens Gmail compose window directly in browser
+  // Works regardless of default email app set on computer
+  const handleEmail = () => {
+    const subject = encodeURIComponent('Share Your Feedback — ClariBox');
+    const body = encodeURIComponent(
+      `Dear Student,\n\nWe value your feedback! Please use the link below to share your experience at our university.\n\n${feedbackLink}\n\nYour feedback is completely anonymous and helps us improve your university experience.\n\nThank you.`
+    );
+    window.open(`https://mail.google.com/mail/?view=cm&fs=1&su=${subject}&body=${body}`, '_blank');
   };
 
   // ── Change password ────────────────────────────────────────────────────────
@@ -397,6 +430,84 @@ const Settings = () => {
           </button>
 
           <MessageBanner msg={generalMsg} />
+        </div>
+      </div>
+
+      {/* ══════════════════════════════════════════════════════════════════════
+          SECTION 4 — SHARE FEEDBACK LINK
+          Generates the student feedback submission URL
+          Admin copies and shares with students via email/WhatsApp
+          No backend needed — just the /submit page URL
+      ══════════════════════════════════════════════════════════════════════ */}
+      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+
+        <div className="flex items-center gap-3 px-6 py-4 border-b border-slate-100">
+          <div className="w-9 h-9 rounded-xl bg-indigo-50 flex items-center justify-center">
+            <Share2 className="w-4 h-4 text-indigo-600" />
+          </div>
+          <div>
+            <h2 className="text-sm font-bold text-slate-800">Share Feedback Link</h2>
+            <p className="text-xs text-slate-500">Share this link with students so they can submit feedback</p>
+          </div>
+        </div>
+
+        <div className="px-6 py-5 space-y-4">
+
+          {/* Link preview box */}
+          <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl border border-slate-200">
+            <Link className="w-4 h-4 text-indigo-500 flex-shrink-0" />
+            <span className="text-sm text-slate-700 flex-1 truncate font-mono">
+              {feedbackLink}
+            </span>
+          </div>
+
+          {/* Info note */}
+          <div className="flex items-start gap-2.5 p-3 bg-indigo-50 border border-indigo-100 rounded-xl">
+            <CheckCircle className="w-4 h-4 text-indigo-500 flex-shrink-0 mt-0.5" />
+            <p className="text-xs text-indigo-700 leading-relaxed">
+              This link takes students directly to the feedback submission page.
+              Submissions are completely anonymous — no personal data is collected.
+              Students cannot access the admin dashboard through this link.
+            </p>
+          </div>
+
+          {/* Share buttons */}
+          <div className="flex flex-wrap gap-3">
+
+            {/* Copy link */}
+            <button
+              onClick={handleCopyLink}
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all cursor-pointer border
+                ${linkCopied
+                  ? 'bg-green-50 border-green-200 text-green-700'
+                  : 'bg-white border-slate-200 text-slate-700 hover:border-indigo-300 hover:text-indigo-600 hover:bg-indigo-50'
+                }`}
+            >
+              {linkCopied
+                ? <><CheckCircle className="w-4 h-4" /> Copied!</>
+                : <><Copy className="w-4 h-4" /> Copy Link</>
+              }
+            </button>
+
+            {/* Share via WhatsApp */}
+            <button
+              onClick={handleWhatsApp}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold bg-green-600 hover:bg-green-700 text-white transition-all cursor-pointer shadow-sm"
+            >
+              <MessageCircle className="w-4 h-4" />
+              Share via WhatsApp
+            </button>
+
+            {/* Share via Gmail */}
+            <button
+              onClick={handleEmail}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold bg-rose-600 hover:bg-rose-700 text-white transition-all cursor-pointer shadow-sm"
+            >
+              <Share2 className="w-4 h-4" />
+              Share via Gmail
+            </button>
+
+          </div>
         </div>
       </div>
 

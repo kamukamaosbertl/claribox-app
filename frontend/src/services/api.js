@@ -17,25 +17,71 @@ api.interceptors.request.use((config) => {
 });
 
 // ── Response interceptor — handle session expiry ──────────────────────────────
-// If backend returns 401 (unauthorized / token expired):
-// 1. Clear stored credentials
-// 2. Redirect to login with a message
 api.interceptors.response.use(
-  (response) => response, // pass through successful responses
+  (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      // Only redirect if we were actually logged in
       const token = localStorage.getItem('adminToken');
       if (token) {
         localStorage.removeItem('adminToken');
         localStorage.removeItem('adminUser');
-        // Redirect to login with session expired message
         window.location.href = '/admin/login?session=expired';
       }
     }
     return Promise.reject(error);
   }
 );
+
+// ── Stream helper — used by ChatWithAI.jsx ────────────────────────────────────
+// Calls /ai/chat/stream and streams response chunks in real time
+// onChunk — called with each text piece as it arrives
+// onError — called if something goes wrong
+export async function chatWithAIStream(message, sessionId, onChunk, onError) {
+  try {
+    const token = localStorage.getItem('adminToken');
+    const response = await fetch(`${API_BASE_URL}/ai/chat/stream`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token && { Authorization: `Bearer ${token}` })
+      },
+      body: JSON.stringify({ message, sessionId })
+    });
+
+    if (!response.ok) {
+      onError('Something went wrong. Please try again.');
+      return;
+    }
+
+    const reader  = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer    = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop(); // keep incomplete line in buffer
+
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        const data = line.slice(6).trim();
+        if (data === '[DONE]') return;
+        try {
+          const parsed = JSON.parse(data);
+          if (parsed.error) { onError(parsed.error); return; }
+          if (parsed.text)  { onChunk(parsed.text); }
+        } catch {
+          // skip malformed chunks
+        }
+      }
+    }
+  } catch (err) {
+    onError('Connection error. Please try again.');
+  }
+}
 
 /* ============ STUDENT API ============ */
 export const studentAPI = {
@@ -60,10 +106,10 @@ export const studentAPI = {
 export const adminAPI = {
 
   /* --- Auth --- */
-  login:       (credentials) => api.post('/auth/login',    credentials),
-  register:    (data)        => api.post('/auth/register', data),
-  googleLogin:     (accessToken)  => api.post('/auth/google',           { accessToken }),
-  changePassword:  (data)         => api.post('/auth/change-password',  data),
+  login:          (credentials) => api.post('/auth/login',           credentials),
+  register:       (data)        => api.post('/auth/register',        data),
+  googleLogin:    (accessToken) => api.post('/auth/google',          { accessToken }),
+  changePassword: (data)        => api.post('/auth/change-password', data),
   logout: () => {
     localStorage.removeItem('adminToken');
     localStorage.removeItem('adminUser');
@@ -75,7 +121,12 @@ export const adminAPI = {
 
   /* --- Profile --- */
   getProfile:    ()     => api.get('/admin/profile'),
-  updateProfile: (data) => api.put('/admin/profile', data),
+  updateProfile: (data) => {
+    const isFormData = data instanceof FormData;
+    return api.put('/admin/profile', data, {
+      headers: { 'Content-Type': isFormData ? 'multipart/form-data' : 'application/json' }
+    });
+  },
 
   /* --- Feedback Management --- */
   getAllFeedback: (filters = {}) => {
@@ -99,18 +150,18 @@ export const adminAPI = {
   getCategoryStats: (params = {}) => api.get('/admin/analytics',  { params }),
 
   /* --- AI Chat & Summaries --- */
-  chatWithAI: (message, history) => api.post('/ai/chat',        { message, history }),
-  getSummary: (id)               => api.get(`/ai/summary/${id}`),
-
-  /* --- Notification Preferences --- */
-  getNotificationPrefs:    ()     => api.get('/admin/notification-prefs'),
-  saveNotificationPrefs:   (data) => api.put('/admin/notification-prefs', data),
+  // chatWithAI — simple non-streaming version (fallback)
+  chatWithAI: (message, history) => api.post('/ai/chat', { message, history }),
+  // chatWithAIStream — streaming version used by ChatWithAI.jsx
+  // imported separately as named export above
+  chatWithAIStream,
+  getSummary: (id) => api.get(`/ai/summary/${id}`),
 
   /* --- Notifications --- */
-  getNotifications:           ()   => api.get('/notifications'),
-  markNotificationRead:       (id) => api.patch(`/notifications/${id}/read`),
-  markAllNotificationsRead:   ()   => api.patch('/notifications/read-all'),
-  deleteNotification:         (id) => api.delete(`/notifications/${id}`),
+  getNotifications:         ()   => api.get('/notifications'),
+  markNotificationRead:     (id) => api.patch(`/notifications/${id}/read`),
+  markAllNotificationsRead: ()   => api.patch('/notifications/read-all'),
+  deleteNotification:       (id) => api.delete(`/notifications/${id}`),
 
   /* --- Resolution Management --- */
   getResolutions:   ()     => api.get('/admin/resolutions'),
