@@ -21,7 +21,7 @@ const Dashboard = () => {
 
   // ── Get real admin info from localStorage ─────────────────────────────────
   // This is saved when the admin logs in (email or Google)
-  // So the greeting will show their real name 
+  // So the greeting will show their real name e.g. "Good morning, Kamukama 👋"
   const [admin] = useState(() => {
     try {
       return JSON.parse(localStorage.getItem('adminUser') || '{}');
@@ -152,9 +152,7 @@ const Dashboard = () => {
         {/* ── Resolutions Panel ── */}
         {dashboardConfig.showResolutionsPanel && (
           <div className="mb-8 lg:mb-12">
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-              <ResolutionsPanel resolutions={data.resolutions} onRefresh={refresh} />
-            </div>
+            <ResolutionsPanel resolutions={data.resolutions} onRefresh={refresh} />
           </div>
         )}
 

@@ -13,8 +13,31 @@ const adminSchema = new mongoose.Schema({
 
   profilePicture: { type: String, default: null },
   role:           { type: String, enum: ['admin', 'superadmin'], default: 'admin' },
+  // Notification preferences — controls which emails are sent
+  notificationPrefs: {
+    emailWeeklyReport: { type: Boolean, default: true },
+    emailSpikeAlert:   { type: Boolean, default: true },
+    emailInactivity:   { type: Boolean, default: true }
+  },
+
   createdAt:      { type: Date, default: Date.now },
-  lastLogin:      { type: Date }
+  lastLogin:      { type: Date },
+
+  // Email notification preferences
+  // Admin can toggle these from Settings page
+  notificationPrefs: {
+    emailWeeklyReport: { type: Boolean, default: true  },
+    emailSpikeAlert:   { type: Boolean, default: true  },
+    emailInactivity:   { type: Boolean, default: true  },
+  },
+
+  // Notification preferences — controlled from Settings page
+  // Each field maps to a toggle in Settings → Notifications
+  notificationPrefs: {
+    emailWeeklyReport: { type: Boolean, default: true  }, // weekly digest
+    emailSpikeAlert:   { type: Boolean, default: true  }, // spike alerts
+    emailInactivity:   { type: Boolean, default: true  }, // inactivity reminders
+  }
 });
 
 // Hash password before saving — only if password exists and was modified

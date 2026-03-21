@@ -15,11 +15,6 @@ const StatsCards = ({ stats, type = 'all', onResolvedClick }) => {
   const resolvedPercent = stats.total > 0
     ? Math.round((stats.resolved / stats.total) * 100)
     : 0;
-
-  const pendingPercent = stats.total > 0
-    ? Math.round((stats.pending / stats.total) * 100)
-    : 0;
-
   /* ---- RESOLVED CARD ---- */
   if (type === 'resolved') {
     return (
@@ -99,23 +94,6 @@ const StatsCards = ({ stats, type = 'all', onResolvedClick }) => {
           </div>
           <div className="w-14 h-14 bg-white/20 backdrop-blur-sm rounded-2xl flex items-center justify-center ring-1 ring-white/30 shadow-xl group-hover:scale-110 transition-all duration-300">
             <MessageSquare size={24} className="text-white drop-shadow-lg" />
-          </div>
-        </div>
-
-        {/* Pending Stats */}
-        <div className="pt-6 border-t border-white/20">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-amber-400/20 backdrop-blur-sm rounded-xl flex items-center justify-center ring-1 ring-amber-400/30">
-                <TrendingUp size={14} className="text-amber-300" />
-              </div>
-              <span className="text-sm font-semibold text-indigo-200/90">
-                {stats.pending || 0} pending
-              </span>
-            </div>
-            <span className="text-xs font-bold bg-white/25 backdrop-blur-sm text-indigo-100 px-3 py-1 rounded-full shadow-lg">
-              {pendingPercent}%
-            </span>
           </div>
         </div>
       </div>

@@ -11,4 +11,5 @@ export const dashboardConfig = {
   showCategoryChart: true,
   showTimeline: true,
   showSentimentAnalysis: true,
+  showResolutionsPanel: true 
 };

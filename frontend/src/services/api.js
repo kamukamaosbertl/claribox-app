@@ -62,11 +62,16 @@ export const adminAPI = {
   /* --- Auth --- */
   login:       (credentials) => api.post('/auth/login',    credentials),
   register:    (data)        => api.post('/auth/register', data),
-  googleLogin: (accessToken) => api.post('/auth/google',   { accessToken }),
+  googleLogin:     (accessToken)  => api.post('/auth/google',           { accessToken }),
+  changePassword:  (data)         => api.post('/auth/change-password',  data),
   logout: () => {
     localStorage.removeItem('adminToken');
     localStorage.removeItem('adminUser');
   },
+
+  /* --- Notification Preferences --- */
+  getNotificationPrefs:  ()     => api.get('/admin/notification-prefs'),
+  saveNotificationPrefs: (data) => api.put('/admin/notification-prefs', data),
 
   /* --- Profile --- */
   getProfile:    ()     => api.get('/admin/profile'),
@@ -75,12 +80,13 @@ export const adminAPI = {
   /* --- Feedback Management --- */
   getAllFeedback: (filters = {}) => {
     const params = new URLSearchParams();
-    if (filters.category) params.append('category', filters.category);
-    if (filters.status)   params.append('status',   filters.status);
-    if (filters.sort)     params.append('sort',      filters.sort);
-    if (filters.limit)    params.append('limit',     filters.limit);
-    if (filters.page)     params.append('page',      filters.page);
-    if (filters.filter)   params.append('filter',    filters.filter);
+    if (filters.category)  params.append('category',  filters.category);
+    if (filters.status)    params.append('status',    filters.status);
+    if (filters.sentiment) params.append('sentiment', filters.sentiment);
+    if (filters.sort)      params.append('sort',      filters.sort);
+    if (filters.limit)     params.append('limit',     filters.limit);
+    if (filters.page)      params.append('page',      filters.page);
+    if (filters.filter)    params.append('filter',    filters.filter);
     return api.get(`/admin/feedback?${params.toString()}`);
   },
 
@@ -95,6 +101,10 @@ export const adminAPI = {
   /* --- AI Chat & Summaries --- */
   chatWithAI: (message, history) => api.post('/ai/chat',        { message, history }),
   getSummary: (id)               => api.get(`/ai/summary/${id}`),
+
+  /* --- Notification Preferences --- */
+  getNotificationPrefs:    ()     => api.get('/admin/notification-prefs'),
+  saveNotificationPrefs:   (data) => api.put('/admin/notification-prefs', data),
 
   /* --- Notifications --- */
   getNotifications:           ()   => api.get('/notifications'),

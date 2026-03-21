@@ -1,201 +1,405 @@
 import { useState, useEffect } from 'react';
-import { 
-  Loader2, 
-  Save, 
-  Bell, 
-  Lock, 
-  Globe,
-  AlertCircle,
-  CheckCircle
+import {
+  Loader2, Save, Bell, Lock, Globe,
+  AlertCircle, CheckCircle, Eye, EyeOff, KeyRound
 } from 'lucide-react';
 import { adminAPI } from '../../services/api';
 
+// ── Settings page ─────────────────────────────────────────────────────────────
+// Sections:
+// 1. Change Password — calls /auth/change-password → sends security alert email
+// 2. Notifications   — toggle email notifications on/off (stored in localStorage)
+// 3. General         — language and timezone preferences (stored in localStorage)
 const Settings = () => {
-  const [settings, setSettings] = useState({
-    notifications: { email: true },
-    security: { sessionTimeout: '30' },
-    general: { language: 'en', timezone: 'Africa/Kampala' }
-  });
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState({ type: '', text: '' });
 
+  // ── Change password state ──────────────────────────────────────────────────
+  const [passwords,      setPasswords]      = useState({ current: '', newPass: '', confirm: '' });
+  const [showCurrent,    setShowCurrent]    = useState(false);
+  const [showNew,        setShowNew]        = useState(false);
+  const [showConfirm,    setShowConfirm]    = useState(false);
+  const [savingPassword, setSavingPassword] = useState(false);
+  const [passwordMsg,    setPasswordMsg]    = useState({ type: '', text: '' });
+
+  // ── Notification preferences state ────────────────────────────────────────
+  // Stored in localStorage — no backend needed
+  // emailNotifications: true → admin receives email alerts
+  const [notifications, setNotifications] = useState({
+    emailWeeklyReport:  true,   // weekly digest every Monday
+    emailSpikeAlert:    true,   // spike alert when 10+ feedbacks in one day
+    emailInactivity:    true,   // reminder when not logged in for 3+ days
+  });
+  const [savingNotif,  setSavingNotif]  = useState(false);
+  const [notifMsg,     setNotifMsg]     = useState({ type: '', text: '' });
+
+  // ── General preferences state ──────────────────────────────────────────────
+  const [general,       setGeneral]       = useState({ language: 'en', timezone: 'Africa/Kampala' });
+  const [savingGeneral, setSavingGeneral] = useState(false);
+  const [generalMsg,    setGeneralMsg]    = useState({ type: '', text: '' });
+
+  // ── Load preferences on mount ─────────────────────────────────────────────
+  // Loads notification prefs from MongoDB — general prefs from localStorage
   useEffect(() => {
-    fetchSettings();
+    const loadPrefs = async () => {
+      try {
+        // Load notification prefs from MongoDB
+        const res = await adminAPI.getNotificationPrefs();
+        if (res.data.data) setNotifications(prev => ({ ...prev, ...res.data.data }));
+      } catch {
+        // fallback to defaults if API fails
+      }
+      try {
+        // Load general prefs from localStorage
+        const savedGeneral = JSON.parse(localStorage.getItem('generalPrefs') || '{}');
+        if (Object.keys(savedGeneral).length > 0) setGeneral(prev => ({ ...prev, ...savedGeneral }));
+      } catch {}
+    };
+    loadPrefs();
   }, []);
 
-  const fetchSettings = async () => {
-    setLoading(true);
+  // ── Show message then auto-hide after 3 seconds ───────────────────────────
+  const showMsg = (setter, type, text) => {
+    setter({ type, text });
+    setTimeout(() => setter({ type: '', text: '' }), 3000);
+  };
+
+  // ── Change password ────────────────────────────────────────────────────────
+  // Calls /auth/change-password on backend
+  // Backend verifies current password, updates it, then sends security alert email
+  const handleChangePassword = async (e) => {
+    e.preventDefault();
+
+    // Client-side validation
+    if (passwords.newPass.length < 6) {
+      showMsg(setPasswordMsg, 'error', 'New password must be at least 6 characters.');
+      return;
+    }
+    if (passwords.newPass !== passwords.confirm) {
+      showMsg(setPasswordMsg, 'error', 'New passwords do not match.');
+      return;
+    }
+    if (passwords.current === passwords.newPass) {
+      showMsg(setPasswordMsg, 'error', 'New password must be different from current password.');
+      return;
+    }
+
+    setSavingPassword(true);
     try {
-      const data = await adminAPI.getSettings();
-      if (data) setSettings(data);
+      const token = localStorage.getItem('adminToken');
+      await adminAPI.changePassword({
+        token,
+        currentPassword: passwords.current,
+        newPassword:     passwords.newPass
+      });
+
+      // Clear form on success
+      setPasswords({ current: '', newPass: '', confirm: '' });
+      showMsg(setPasswordMsg, 'success', 'Password changed successfully! A security alert was sent to your email.');
     } catch (err) {
-      console.error('Error:', err);
+      showMsg(setPasswordMsg, 'error', err.response?.data?.message || 'Failed to change password. Please try again.');
     } finally {
-      setLoading(false);
+      setSavingPassword(false);
     }
   };
 
-  const handleSave = async () => {
-    setSaving(true);
+  // ── Save notification preferences to MongoDB via backend ──────────────────
+  // When toggle is OFF → backend emailService skips that email type
+  const handleSaveNotifications = async () => {
+    setSavingNotif(true);
     try {
-      await adminAPI.updateSettings(settings);
-      setMessage({ type: 'success', text: 'Settings saved successfully!' });
-      setTimeout(() => setMessage({ type: '', text: '' }), 3000);
-    } catch (err) {
-      setMessage({ type: 'error', text: 'Failed to save settings' });
+      await adminAPI.saveNotificationPrefs(notifications);
+      showMsg(setNotifMsg, 'success', 'Notification preferences saved!');
+    } catch {
+      showMsg(setNotifMsg, 'error', 'Failed to save preferences.');
     } finally {
-      setSaving(false);
+      setSavingNotif(false);
     }
   };
 
-  const handleChange = (section, key, value) => {
-    setSettings(prev => ({
-      ...prev,
-      [section]: { ...prev[section], [key]: value }
-    }));
+  // ── Save general preferences ───────────────────────────────────────────────
+  const handleSaveGeneral = () => {
+    setSavingGeneral(true);
+    try {
+      localStorage.setItem('generalPrefs', JSON.stringify(general));
+      showMsg(setGeneralMsg, 'success', 'General settings saved!');
+    } catch {
+      showMsg(setGeneralMsg, 'error', 'Failed to save settings.');
+    } finally {
+      setSavingGeneral(false);
+    }
   };
 
-  if (loading) {
+  // ── Reusable message banner ────────────────────────────────────────────────
+  const MessageBanner = ({ msg }) => {
+    if (!msg.text) return null;
     return (
-      <div className="flex items-center justify-center h-96">
-        <Loader2 className="w-10 h-10 text-indigo-600 animate-spin" />
+      <div className={`flex items-center gap-3 p-3 rounded-xl border text-sm font-medium mt-4
+        ${msg.type === 'success'
+          ? 'bg-emerald-50 border-emerald-100 text-emerald-700'
+          : 'bg-red-50 border-red-100 text-red-700'
+        }`}>
+        {msg.type === 'success'
+          ? <CheckCircle className="w-4 h-4 flex-shrink-0" />
+          : <AlertCircle className="w-4 h-4 flex-shrink-0" />
+        }
+        {msg.text}
       </div>
     );
-  }
+  };
+
+  // ── Toggle switch component ────────────────────────────────────────────────
+  const Toggle = ({ checked, onChange }) => (
+    <label className="relative inline-flex items-center cursor-pointer">
+      <input type="checkbox" checked={checked} onChange={e => onChange(e.target.checked)} className="sr-only peer" />
+      <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-indigo-100 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600" />
+    </label>
+  );
 
   return (
-    <div className="space-y-6 max-w-4xl">
-      {/* Header Card */}
-      <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div className="flex items-center gap-4">
-          <div className="p-3 bg-indigo-50 rounded-xl border border-indigo-100">
-            <Globe className="w-6 h-6 text-indigo-600" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold text-slate-900">Settings</h1>
-            <p className="text-sm text-slate-500 font-medium">Manage your preferences and configuration</p>
-          </div>
-        </div>
-        <button
-          onClick={handleSave}
-          disabled={saving}
-          className="flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2.5 rounded-xl font-semibold transition-all shadow-lg shadow-indigo-200 disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-          Save Changes
-        </button>
+    <div className="max-w-3xl mx-auto space-y-6 pb-12">
+
+      {/* ── Page header ── */}
+      <div>
+        <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">Settings</h1>
+        <p className="text-sm text-slate-500 mt-1">Manage your account, notifications and preferences</p>
       </div>
 
-      {/* Feedback Message */}
-      {message.text && (
-        <div className={`p-4 rounded-xl flex items-center gap-3 border ${
-          message.type === 'success' ? 'bg-emerald-50 border-emerald-100 text-emerald-700' : 'bg-red-50 border-red-100 text-red-700'
-        }`}>
-          {message.type === 'success' ? <CheckCircle className="w-5 h-5" /> : <AlertCircle className="w-5 h-5" />}
-          <span className="font-medium text-sm">{message.text}</span>
-        </div>
-      )}
+      {/* ══════════════════════════════════════════════════════════════════════
+          SECTION 1 — CHANGE PASSWORD
+          Calls /auth/change-password → verifies current password → updates
+          → sends security alert email immediately
+      ══════════════════════════════════════════════════════════════════════ */}
+      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
 
-      {/* Notifications Section */}
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
-        <div className="flex items-center gap-3 mb-6">
-          <div className="p-2 bg-blue-50 rounded-lg">
-            <Bell className="w-5 h-5 text-blue-600" />
+        {/* Section header */}
+        <div className="flex items-center gap-3 px-6 py-4 border-b border-slate-100">
+          <div className="w-9 h-9 rounded-xl bg-purple-50 flex items-center justify-center">
+            <KeyRound className="w-4 h-4 text-purple-600" />
           </div>
-          <h2 className="text-lg font-bold text-slate-800">Notifications</h2>
-        </div>
-        
-        <div className="flex items-center justify-between p-4 bg-slate-50 rounded-xl border border-slate-100">
           <div>
-            <p className="font-semibold text-slate-800">Email Notifications</p>
-            <p className="text-sm text-slate-500">Receive email alerts for new feedback submissions</p>
+            <h2 className="text-sm font-bold text-slate-800">Change Password</h2>
+            <p className="text-xs text-slate-500">A security alert email will be sent after changing</p>
           </div>
-          <label className="relative inline-flex items-center cursor-pointer">
-            <input
-              type="checkbox"
-              checked={settings.notifications.email}
-              onChange={(e) => handleChange('notifications', 'email', e.target.checked)}
-              className="sr-only peer"
-            />
-            <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-indigo-100 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
-          </label>
         </div>
-      </div>
 
-      {/* Security Section */}
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
-        <div className="flex items-center gap-3 mb-6">
-          <div className="p-2 bg-purple-50 rounded-lg">
-            <Lock className="w-5 h-5 text-purple-600" />
-          </div>
-          <h2 className="text-lg font-bold text-slate-800">Security</h2>
-        </div>
-        
-        <div className="w-full md:w-1/2">
-          <label className="block text-sm font-semibold text-slate-700 mb-2">Session Timeout</label>
-          <div className="relative">
-            <select
-              value={settings.security.sessionTimeout}
-              onChange={(e) => handleChange('security', 'sessionTimeout', e.target.value)}
-              className="w-full appearance-none bg-slate-50 border border-slate-200 text-slate-700 text-sm font-medium rounded-xl px-4 py-3 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
-            >
-              <option value="15">15 minutes</option>
-              <option value="30">30 minutes</option>
-              <option value="60">1 hour</option>
-            </select>
-            <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-slate-500">
-              <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/></svg>
+        <form onSubmit={handleChangePassword} className="px-6 py-5 space-y-4">
+
+          {/* Current password */}
+          <div>
+            <label className="block text-xs font-semibold text-slate-600 mb-1.5">Current Password</label>
+            <div className="relative">
+              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <input
+                type={showCurrent ? 'text' : 'password'}
+                value={passwords.current}
+                onChange={e => setPasswords({ ...passwords, current: e.target.value })}
+                placeholder="Enter current password"
+                required
+                className="w-full pl-9 pr-10 py-2.5 text-sm border border-slate-200 rounded-xl bg-slate-50 focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:bg-white transition-all"
+              />
+              <button type="button" onClick={() => setShowCurrent(!showCurrent)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                {showCurrent ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
             </div>
           </div>
+
+          {/* New password */}
+          <div>
+            <label className="block text-xs font-semibold text-slate-600 mb-1.5">New Password</label>
+            <div className="relative">
+              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <input
+                type={showNew ? 'text' : 'password'}
+                value={passwords.newPass}
+                onChange={e => setPasswords({ ...passwords, newPass: e.target.value })}
+                placeholder="Minimum 6 characters"
+                required
+                minLength={6}
+                className="w-full pl-9 pr-10 py-2.5 text-sm border border-slate-200 rounded-xl bg-slate-50 focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:bg-white transition-all"
+              />
+              <button type="button" onClick={() => setShowNew(!showNew)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                {showNew ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+          </div>
+
+          {/* Confirm new password */}
+          <div>
+            <label className="block text-xs font-semibold text-slate-600 mb-1.5">Confirm New Password</label>
+            <div className="relative">
+              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <input
+                type={showConfirm ? 'text' : 'password'}
+                value={passwords.confirm}
+                onChange={e => setPasswords({ ...passwords, confirm: e.target.value })}
+                placeholder="Repeat new password"
+                required
+                className={`w-full pl-9 pr-10 py-2.5 text-sm border rounded-xl bg-slate-50 focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:bg-white transition-all
+                  ${passwords.confirm && passwords.confirm !== passwords.newPass
+                    ? 'border-red-300 focus:ring-red-300'
+                    : 'border-slate-200'
+                  }`}
+              />
+              <button type="button" onClick={() => setShowConfirm(!showConfirm)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                {showConfirm ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+            {/* Live mismatch warning */}
+            {passwords.confirm && passwords.confirm !== passwords.newPass && (
+              <p className="text-xs text-red-500 mt-1">Passwords do not match</p>
+            )}
+          </div>
+
+          {/* Submit button */}
+          <button
+            type="submit"
+            disabled={savingPassword}
+            className="flex items-center gap-2 px-5 py-2.5 bg-purple-600 hover:bg-purple-700 text-white text-sm font-bold rounded-xl transition-all cursor-pointer disabled:opacity-50 shadow-sm"
+          >
+            {savingPassword
+              ? <><Loader2 className="w-4 h-4 animate-spin" /> Changing...</>
+              : <><KeyRound className="w-4 h-4" /> Change Password</>
+            }
+          </button>
+
+          <MessageBanner msg={passwordMsg} />
+        </form>
+      </div>
+
+      {/* ══════════════════════════════════════════════════════════════════════
+          SECTION 2 — EMAIL NOTIFICATIONS
+          Each toggle controls whether that email type is sent
+          Preferences saved to localStorage
+          When toggle is OFF → that email type is skipped
+      ══════════════════════════════════════════════════════════════════════ */}
+      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+
+        <div className="flex items-center gap-3 px-6 py-4 border-b border-slate-100">
+          <div className="w-9 h-9 rounded-xl bg-blue-50 flex items-center justify-center">
+            <Bell className="w-4 h-4 text-blue-600" />
+          </div>
+          <div>
+            <h2 className="text-sm font-bold text-slate-800">Email Notifications</h2>
+            <p className="text-xs text-slate-500">Control which emails ClariBox sends you</p>
+          </div>
+        </div>
+
+        <div className="px-6 py-5 space-y-4">
+
+          {/* Weekly report toggle */}
+          <div className="flex items-center justify-between p-4 bg-slate-50 rounded-xl border border-slate-100">
+            <div>
+              <p className="text-sm font-semibold text-slate-800">Weekly Feedback Report</p>
+              <p className="text-xs text-slate-500 mt-0.5">Every Monday at 8am — summary of last 7 days</p>
+            </div>
+            <Toggle
+              checked={notifications.emailWeeklyReport}
+              onChange={val => setNotifications(prev => ({ ...prev, emailWeeklyReport: val }))}
+            />
+          </div>
+
+          {/* Spike alert toggle */}
+          <div className="flex items-center justify-between p-4 bg-slate-50 rounded-xl border border-slate-100">
+            <div>
+              <p className="text-sm font-semibold text-slate-800">Feedback Spike Alert</p>
+              <p className="text-xs text-slate-500 mt-0.5">Sent immediately when 10+ feedbacks in one day</p>
+            </div>
+            <Toggle
+              checked={notifications.emailSpikeAlert}
+              onChange={val => setNotifications(prev => ({ ...prev, emailSpikeAlert: val }))}
+            />
+          </div>
+
+          {/* Inactivity reminder toggle */}
+          <div className="flex items-center justify-between p-4 bg-slate-50 rounded-xl border border-slate-100">
+            <div>
+              <p className="text-sm font-semibold text-slate-800">Inactivity Reminder</p>
+              <p className="text-xs text-slate-500 mt-0.5">Sent when you haven't logged in for 3+ days</p>
+            </div>
+            <Toggle
+              checked={notifications.emailInactivity}
+              onChange={val => setNotifications(prev => ({ ...prev, emailInactivity: val }))}
+            />
+          </div>
+
+          {/* Save button */}
+          <button
+            onClick={handleSaveNotifications}
+            disabled={savingNotif}
+            className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold rounded-xl transition-all cursor-pointer disabled:opacity-50 shadow-sm"
+          >
+            {savingNotif
+              ? <><Loader2 className="w-4 h-4 animate-spin" /> Saving...</>
+              : <><Save className="w-4 h-4" /> Save Preferences</>
+            }
+          </button>
+
+          <MessageBanner msg={notifMsg} />
         </div>
       </div>
 
-      {/* General Section */}
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
-        <div className="flex items-center gap-3 mb-6">
-          <div className="p-2 bg-emerald-50 rounded-lg">
-            <Globe className="w-5 h-5 text-emerald-600" />
+      {/* ══════════════════════════════════════════════════════════════════════
+          SECTION 3 — GENERAL PREFERENCES
+          Language and timezone — saved to localStorage
+      ══════════════════════════════════════════════════════════════════════ */}
+      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+
+        <div className="flex items-center gap-3 px-6 py-4 border-b border-slate-100">
+          <div className="w-9 h-9 rounded-xl bg-emerald-50 flex items-center justify-center">
+            <Globe className="w-4 h-4 text-emerald-600" />
           </div>
-          <h2 className="text-lg font-bold text-slate-800">General</h2>
-        </div>
-        
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
-            <label className="block text-sm font-semibold text-slate-700 mb-2">Language</label>
-            <div className="relative">
+            <h2 className="text-sm font-bold text-slate-800">General</h2>
+            <p className="text-xs text-slate-500">Language and timezone preferences</p>
+          </div>
+        </div>
+
+        <div className="px-6 py-5 space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+            {/* Language */}
+            <div>
+              <label className="block text-xs font-semibold text-slate-600 mb-1.5">Language</label>
               <select
-                value={settings.general.language}
-                onChange={(e) => handleChange('general', 'language', e.target.value)}
-                className="w-full appearance-none bg-slate-50 border border-slate-200 text-slate-700 text-sm font-medium rounded-xl px-4 py-3 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
+                value={general.language}
+                onChange={e => setGeneral({ ...general, language: e.target.value })}
+                className="w-full px-4 py-2.5 text-sm border border-slate-200 rounded-xl bg-slate-50 focus:outline-none focus:ring-2 focus:ring-indigo-400 transition-all cursor-pointer"
               >
                 <option value="en">English</option>
                 <option value="sw">Swahili</option>
               </select>
-              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-slate-500">
-                <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/></svg>
-              </div>
             </div>
-          </div>
-          
-          <div>
-            <label className="block text-sm font-semibold text-slate-700 mb-2">Timezone</label>
-            <div className="relative">
+
+            {/* Timezone */}
+            <div>
+              <label className="block text-xs font-semibold text-slate-600 mb-1.5">Timezone</label>
               <select
-                value={settings.general.timezone}
-                onChange={(e) => handleChange('general', 'timezone', e.target.value)}
-                className="w-full appearance-none bg-slate-50 border border-slate-200 text-slate-700 text-sm font-medium rounded-xl px-4 py-3 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
+                value={general.timezone}
+                onChange={e => setGeneral({ ...general, timezone: e.target.value })}
+                className="w-full px-4 py-2.5 text-sm border border-slate-200 rounded-xl bg-slate-50 focus:outline-none focus:ring-2 focus:ring-indigo-400 transition-all cursor-pointer"
               >
-                <option value="Africa/Kampala">Africa/Kampala (EAT)</option>
-                <option value="UTC">UTC</option>
+                <option value="Africa/Kampala">Africa/Kampala (EAT +3)</option>
+                <option value="UTC">UTC +0</option>
+                <option value="Africa/Nairobi">Africa/Nairobi (EAT +3)</option>
+                <option value="Africa/Lagos">Africa/Lagos (WAT +1)</option>
               </select>
-              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-slate-500">
-                <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/></svg>
-              </div>
             </div>
           </div>
+
+          <button
+            onClick={handleSaveGeneral}
+            disabled={savingGeneral}
+            className="flex items-center gap-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold rounded-xl transition-all cursor-pointer disabled:opacity-50 shadow-sm"
+          >
+            {savingGeneral
+              ? <><Loader2 className="w-4 h-4 animate-spin" /> Saving...</>
+              : <><Save className="w-4 h-4" /> Save General Settings</>
+            }
+          </button>
+
+          <MessageBanner msg={generalMsg} />
         </div>
       </div>
+
     </div>
   );
 };

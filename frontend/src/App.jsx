@@ -14,6 +14,7 @@ import CategoryInsights from './pages/admin/CategoryInsights';
 import Reports from './pages/admin/Reports';
 import Settings from './pages/admin/Settings';
 import ChatWithAI from './pages/admin/ChatWithAI';
+import AllFeedback from './pages/admin/AllFeedback';
 
 // ─── Token Validator ──────────────────────────────────────────────────────────
 // Checks token exists AND is not expired by decoding the JWT payload
@@ -104,7 +105,7 @@ function App() {
           <Route path="chat"      element={<ChatWithAI />} />
           <Route path="insights"  element={<CategoryInsights />} />
           <Route path="reports"   element={<Reports />} />
-          <Route path="feedback"  element={<Dashboard />} />  {/* TODO: replace with AllFeedback page */}
+          <Route path="feedback"  element={<AllFeedback />} /> 
           <Route path="settings"  element={<Settings />} />
         </Route>
 

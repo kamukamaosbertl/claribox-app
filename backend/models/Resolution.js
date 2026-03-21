@@ -1,33 +1,60 @@
 const mongoose = require('mongoose');
 
-// 🔹 Schema for resolved feedback entries
+// ── Resolution Model ──────────────────────────────────────────────────────────
+// Stores issues that have been resolved by the admin
+// Shown on dashboard and in reports
 const resolutionSchema = new mongoose.Schema({
-  title: {                // Short title for resolution
-    type: String,
+
+  // Short title e.g. "Fixed WiFi in Library"
+  title: {
+    type:     String,
     required: true,
-    trim: true
+    trim:     true
   },
-  description: {          // Detailed description of how issue was resolved
-    type: String,
+
+  // Full description of what was done to resolve the issue
+  description: {
+    type:     String,
     required: true
   },
-  category: {             // Optional category for filtering/reporting
-    type: String,
-    enum: ['General','Infrastructure','Academics','Services','Facilities','Technology','Other'],
+
+  // Category matches feedback categories so trending issues can be linked
+  category: {
+    type:    String,
+    enum:    [
+      'General', 'Infrastructure', 'Academics', 'Services',
+      'Facilities', 'Technology', 'Other',
+      // Feedback categories — matched to resolution for trending impact
+      'Academic', 'Library', 'IT', 'Canteen', 'Transport', 'Hostel', 'Admin'
+    ],
     default: 'General'
   },
-  affectedFeedbackIds: [{ // Keep track of which feedback this resolution addresses
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Feedback'
-  }],
-  resolvedBy: {           // Admin who resolved the issue
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Admin'
+
+  // Status of the resolution — tracks progress
+  status: {
+    type:    String,
+    enum:    ['Completed', 'In Progress', 'Planned'],
+    default: 'Completed'
   },
-  isPublished: {          // Whether students can see it (as confirmation)
-    type: Boolean,
-    default: false
+
+  // Which feedback submissions this resolution addresses (optional)
+  affectedFeedbackIds: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref:  'Feedback'
+  }],
+
+  // Admin who created this resolution
+  resolvedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref:  'Admin'
+  },
+
+  // Whether this resolution is published/active
+  isPublished: {
+    type:    Boolean,
+    default: true
   }
-}, { timestamps: true }); // createdAt and updatedAt
+
+}, { timestamps: true }); // adds createdAt and updatedAt automatically
 
 module.exports = mongoose.model('Resolution', resolutionSchema);

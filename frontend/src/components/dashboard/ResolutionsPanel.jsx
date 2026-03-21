@@ -1,24 +1,32 @@
 import { useState } from 'react';
-import { CheckCircle, Plus, X, Send, Clock, Sparkles } from 'lucide-react';
+import { CheckCircle, Plus, X, Send, Clock, Sparkles, Trash2 } from 'lucide-react';
 import { adminAPI } from '../../services/api';
 
+// ── Status badge styles ───────────────────────────────────────────────────────
 const STATUS_STYLES = {
-  'Completed':   { badge: 'bg-green-50 text-green-700',  dot: 'bg-green-500'  },
-  'In Progress': { badge: 'bg-amber-50 text-amber-700',  dot: 'bg-amber-500'  },
+  'Completed':   { badge: 'bg-green-50 text-green-700',   dot: 'bg-green-500'  },
+  'In Progress': { badge: 'bg-amber-50 text-amber-700',   dot: 'bg-amber-500'  },
   'Planned':     { badge: 'bg-indigo-50 text-indigo-700', dot: 'bg-indigo-500' },
 };
 
 const EMPTY_FORM = { title: '', description: '', category: 'General', status: 'Completed' };
 
+// ── ResolutionsPanel component ────────────────────────────────────────────────
+// Shows documented resolutions on the dashboard
+// Admin can add new resolutions and delete existing ones
+// When a resolution is added for a category — that category should show
+// as "Improving" in the Trending Issues panel (feedback reducing)
 const ResolutionsPanel = ({ resolutions = [], onRefresh }) => {
   const [isOpen,     setIsOpen]     = useState(false);
   const [isAdding,   setIsAdding]   = useState(false);
   const [formData,   setFormData]   = useState(EMPTY_FORM);
   const [submitting, setSubmitting] = useState(false);
+  const [deletingId, setDeletingId] = useState(null); // tracks which resolution is being deleted
 
-  const handleChange  = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
-  const handleCancel  = () => { setIsAdding(false); setFormData(EMPTY_FORM); };
+  const handleChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
+  const handleCancel = () => { setIsAdding(false); setFormData(EMPTY_FORM); };
 
+  // ── Add new resolution ────────────────────────────────────────────────────
   const handleSubmit = async (e) => {
     e.preventDefault();
     setSubmitting(true);
@@ -26,7 +34,7 @@ const ResolutionsPanel = ({ resolutions = [], onRefresh }) => {
       await adminAPI.createResolution(formData);
       setFormData(EMPTY_FORM);
       setIsAdding(false);
-      onRefresh();
+      onRefresh(); // refresh dashboard data so stats update
     } catch (error) {
       console.error('Error adding resolution:', error);
       alert('Failed to add resolution. Please try again.');
@@ -35,13 +43,28 @@ const ResolutionsPanel = ({ resolutions = [], onRefresh }) => {
     }
   };
 
+  // ── Delete resolution ─────────────────────────────────────────────────────
+  // Asks for confirmation before deleting
+  // After deleting — refreshes dashboard so counts update
+  const handleDelete = async (id) => {
+    if (!window.confirm('Delete this resolution? This cannot be undone.')) return;
+    setDeletingId(id);
+    try {
+      await adminAPI.deleteResolution(id);
+      onRefresh(); // refresh so resolved count updates in stats cards
+    } catch {
+      alert('Failed to delete resolution. Please try again.');
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
   return (
     <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
 
-      {/* Header */}
+      {/* ── Header ── */}
       <div className="relative overflow-hidden bg-gradient-to-r from-emerald-600 to-emerald-500 px-5 py-4 flex items-center justify-between">
         <div className="absolute -top-4 -right-4 w-20 h-20 rounded-full bg-white/10 pointer-events-none" />
-
         <div className="relative flex items-center gap-3">
           <div className="w-8 h-8 rounded-xl bg-white/20 flex items-center justify-center">
             <CheckCircle className="w-4 h-4 text-white" />
@@ -53,7 +76,6 @@ const ResolutionsPanel = ({ resolutions = [], onRefresh }) => {
             </p>
           </div>
         </div>
-
         <button
           onClick={() => setIsOpen(!isOpen)}
           className="relative text-xs font-semibold text-white bg-white/20 hover:bg-white/30 px-4 py-1.5 rounded-full transition-colors border-none cursor-pointer"
@@ -62,7 +84,7 @@ const ResolutionsPanel = ({ resolutions = [], onRefresh }) => {
         </button>
       </div>
 
-      {/* Add button */}
+      {/* ── Add button ── */}
       {!isAdding && (
         <div className="px-5 py-4">
           <button
@@ -75,11 +97,9 @@ const ResolutionsPanel = ({ resolutions = [], onRefresh }) => {
         </div>
       )}
 
-      {/* Add form */}
+      {/* ── Add resolution form ── */}
       {isAdding && (
         <div className="px-5 py-4 bg-slate-50 border-t border-slate-100">
-
-          {/* Form header */}
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
               <Sparkles className="w-4 h-4 text-indigo-500" />
@@ -94,7 +114,6 @@ const ResolutionsPanel = ({ resolutions = [], onRefresh }) => {
           </div>
 
           <form onSubmit={handleSubmit} className="flex flex-col gap-3">
-
             <div>
               <label className="block text-xs font-semibold text-slate-600 mb-1.5">Resolution Title</label>
               <input
@@ -130,7 +149,7 @@ const ResolutionsPanel = ({ resolutions = [], onRefresh }) => {
                   onChange={handleChange}
                   className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white text-sm outline-none focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 transition-all"
                 >
-                  {['General','Infrastructure','Academics','Services','Facilities','Technology','Other'].map(c => (
+                  {['General','Academic','Library','IT','Facilities','Canteen','Transport','Hostel','Other'].map(c => (
                     <option key={c} value={c}>{c}</option>
                   ))}
                 </select>
@@ -181,29 +200,54 @@ const ResolutionsPanel = ({ resolutions = [], onRefresh }) => {
         </div>
       )}
 
-      {/* Resolutions list */}
+      {/* ── Resolutions list ── */}
       {isOpen && (
         <div className="border-t border-slate-100">
           {resolutions.length > 0 ? (
             <div className="max-h-96 overflow-y-auto divide-y divide-slate-50">
               {resolutions.map((res, i) => {
-                const s = STATUS_STYLES[res.status] || STATUS_STYLES['Planned'];
+                const s           = STATUS_STYLES[res.status] || STATUS_STYLES['Planned'];
+                const isDeleting  = deletingId === res._id;
+                const isCompleted = res.status === 'Completed';
+
                 return (
                   <div key={i} className="px-5 py-4 hover:bg-slate-50 transition-colors">
                     <div className="flex items-start justify-between gap-3 mb-2">
-                      <h4 className="text-sm font-bold text-slate-800">{res.title}</h4>
-                      <span className={`flex items-center gap-1.5 text-xs font-bold px-2.5 py-1 rounded-full whitespace-nowrap flex-shrink-0 ${s.badge}`}>
-                        <span className={`w-1.5 h-1.5 rounded-full ${s.dot}`} />
-                        {res.status}
-                      </span>
+
+                      {/* Title */}
+                      <h4 className="text-sm font-bold text-slate-800 flex-1">{res.title}</h4>
+
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        {/* Status badge */}
+                        <span className={`flex items-center gap-1.5 text-xs font-bold px-2.5 py-1 rounded-full whitespace-nowrap ${s.badge}`}>
+                          <span className={`w-1.5 h-1.5 rounded-full ${s.dot}`} />
+                          {res.status}
+                        </span>
+
+                        {/* Delete button */}
+                        <button
+                          onClick={() => handleDelete(res._id)}
+                          disabled={isDeleting}
+                          title="Delete resolution"
+                          className="w-6 h-6 rounded-lg bg-red-50 hover:bg-red-100 flex items-center justify-center text-red-400 hover:text-red-600 transition-colors cursor-pointer disabled:opacity-40"
+                        >
+                          {isDeleting
+                            ? <div className="w-3 h-3 border-2 border-red-300 border-t-red-600 rounded-full animate-spin" />
+                            : <Trash2 className="w-3 h-3" />
+                          }
+                        </button>
+                      </div>
                     </div>
 
                     <p className="text-xs text-slate-500 mb-3 leading-relaxed">{res.description}</p>
 
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-3 flex-wrap">
+                      {/* Category badge */}
                       <span className="text-xs font-semibold text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-full">
                         {res.category}
                       </span>
+
+                      {/* Date */}
                       <div className="flex items-center gap-1">
                         <Clock className="w-3 h-3 text-slate-400" />
                         <span className="text-xs text-slate-400">
@@ -212,6 +256,14 @@ const ResolutionsPanel = ({ resolutions = [], onRefresh }) => {
                             : 'Recently'}
                         </span>
                       </div>
+
+                      {/* Impact note — shown on completed resolutions */}
+                      {/* Explains the connection to Trending Issues panel */}
+                      {isCompleted && (
+                        <span className="text-xs text-green-600 bg-green-50 px-2.5 py-1 rounded-full font-semibold">
+                          ✅ May reduce {res.category} complaints
+                        </span>
+                      )}
                     </div>
                   </div>
                 );

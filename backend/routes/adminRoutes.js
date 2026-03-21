@@ -145,6 +145,96 @@ router.put('/profile', auth, upload.single('profilePicture'), async (req, res) =
   }
 });
 
+// PUT /api/admin/notification-prefs
+// Saves admin notification preferences to MongoDB
+// Called when admin clicks Save in Settings → Notifications
+router.put('/notification-prefs', auth, async (req, res) => {
+  try {
+    const { emailWeeklyReport, emailSpikeAlert, emailInactivity } = req.body;
+    const admin = await Admin.findByIdAndUpdate(
+      req.adminId,
+      { notificationPrefs: { emailWeeklyReport, emailSpikeAlert, emailInactivity } },
+      { new: true }
+    ).select('-password');
+    res.json({ success: true, data: admin.notificationPrefs });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+// GET /api/admin/notification-prefs
+// Returns current notification preferences
+router.get('/notification-prefs', auth, async (req, res) => {
+  try {
+    const admin = await Admin.findById(req.adminId).select('notificationPrefs');
+    res.json({ success: true, data: admin?.notificationPrefs || {} });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+// PUT /api/admin/notification-prefs
+// Saves admin notification preferences to MongoDB
+// Called when admin clicks Save Preferences in Settings page
+router.put('/notification-prefs', auth, async (req, res) => {
+  try {
+    const { emailWeeklyReport, emailSpikeAlert, emailInactivity } = req.body;
+    await Admin.findByIdAndUpdate(req.adminId, {
+      notificationPrefs: { emailWeeklyReport, emailSpikeAlert, emailInactivity }
+    });
+    res.json({ success: true, message: 'Notification preferences saved.' });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+// GET /api/admin/notification-prefs
+// Returns admin notification preferences
+router.get('/notification-prefs', auth, async (req, res) => {
+  try {
+    const admin = await Admin.findById(req.adminId).select('notificationPrefs');
+    res.json({ success: true, data: admin.notificationPrefs || {} });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+// ============================================================
+// NOTIFICATION PREFERENCES ROUTES
+// ============================================================
+
+// GET /api/admin/notification-prefs
+// Returns saved notification preferences for this admin
+router.get('/notification-prefs', auth, async (req, res) => {
+  try {
+    const admin = await Admin.findById(req.adminId).select('notificationPrefs');
+    res.json({
+      success: true,
+      data: admin?.notificationPrefs || {
+        emailWeeklyReport: true,
+        emailSpikeAlert:   true,
+        emailInactivity:   true
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// PUT /api/admin/notification-prefs
+// Saves notification preferences to MongoDB
+router.put('/notification-prefs', auth, async (req, res) => {
+  try {
+    const { emailWeeklyReport, emailSpikeAlert, emailInactivity } = req.body;
+    await Admin.findByIdAndUpdate(req.adminId, {
+      notificationPrefs: { emailWeeklyReport, emailSpikeAlert, emailInactivity }
+    });
+    res.json({ success: true, message: 'Preferences saved' });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
 // ============================================================
 // FEEDBACK ROUTES
 // ============================================================
@@ -152,11 +242,12 @@ router.put('/profile', auth, upload.single('profilePicture'), async (req, res) =
 // GET /api/admin/feedback — with filters and pagination
 router.get('/feedback', auth, async (req, res) => {
   try {
-    const { category, status, sort, limit, page, filter } = req.query;
+    const { category, status, sentiment, sort, limit, page, filter } = req.query;
     const query = {};
 
-    if (category && category !== 'all') query.category = category;
-    if (status   && status   !== 'all') query.status   = status;
+    if (category  && category  !== 'all') query.category  = category;
+    if (status    && status    !== 'all') query.status    = status;
+    if (sentiment && sentiment !== 'all') query.sentiment = sentiment;
 
     const startDate = getStartDate(filter);
     if (startDate) query.createdAt = { $gte: startDate };
@@ -260,12 +351,27 @@ router.get('/stats/time', auth, async (req, res) => {
 });
 
 // GET /api/admin/trends
+// Compares this week vs last week to determine real trend direction
+// trend: 'up' = more feedback this week (problem getting worse)
+// trend: 'down' = less feedback this week (problem improving — resolution working)
+// trend: 'stable' = same as last week
 router.get('/trends', auth, async (req, res) => {
   try {
-    const { filter }   = req.query;
-    const startDate    = getStartDate(filter);
-    const matchQuery   = startDate ? { createdAt: { $gte: startDate } } : {};
+    const { filter } = req.query;
+    const startDate  = getStartDate(filter);
+    const matchQuery = startDate ? { createdAt: { $gte: startDate } } : {};
 
+    // This week range
+    const thisWeekStart = new Date();
+    thisWeekStart.setDate(thisWeekStart.getDate() - 7);
+
+    // Last week range
+    const lastWeekStart = new Date();
+    lastWeekStart.setDate(lastWeekStart.getDate() - 14);
+    const lastWeekEnd = new Date();
+    lastWeekEnd.setDate(lastWeekEnd.getDate() - 7);
+
+    // Get overall category counts
     const trends = await Feedback.aggregate([
       { $match: matchQuery },
       { $group: { _id: '$category', count: { $sum: 1 } } },
@@ -273,10 +379,45 @@ router.get('/trends', auth, async (req, res) => {
       { $limit: 10 }
     ]);
 
-    res.json({
-      success: true,
-      data: trends.map(t => ({ title: t._id, count: t.count, trend: 'up' }))
+    // Get this week counts per category
+    const thisWeek = await Feedback.aggregate([
+      { $match: { createdAt: { $gte: thisWeekStart } } },
+      { $group: { _id: '$category', count: { $sum: 1 } } }
+    ]);
+
+    // Get last week counts per category
+    const lastWeek = await Feedback.aggregate([
+      { $match: { createdAt: { $gte: lastWeekStart, $lte: lastWeekEnd } } },
+      { $group: { _id: '$category', count: { $sum: 1 } } }
+    ]);
+
+    // Build lookup maps for quick access
+    const thisWeekMap = {};
+    const lastWeekMap = {};
+    thisWeek.forEach(t => thisWeekMap[t._id] = t.count);
+    lastWeek.forEach(t => lastWeekMap[t._id] = t.count);
+
+    // Determine trend direction per category
+    const formatted = trends.map(t => {
+      const thisCount = thisWeekMap[t._id] || 0;
+      const lastCount = lastWeekMap[t._id] || 0;
+
+      let trend = 'stable';
+      if (thisCount > lastCount) trend = 'up';   // more complaints = rising problem
+      if (thisCount < lastCount) trend = 'down'; // fewer complaints = improving
+
+      return {
+        title:     t._id,
+        count:     t.count,
+        trend,
+        thisWeek:  thisCount,
+        lastWeek:  lastCount,
+        // Change in number e.g. +3 or -2
+        change:    thisCount - lastCount
+      };
     });
+
+    res.json({ success: true, data: formatted });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
