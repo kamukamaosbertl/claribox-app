@@ -1,129 +1,196 @@
 import { Link } from 'react-router-dom';
 import { MessageSquare, ArrowRight, Clock, Hash } from 'lucide-react';
 
-// ── Category color mapping ────────────────────────────────────────────────────
-// Each category has a background, text and dot color for the badge
+const font = "'Plus Jakarta Sans', 'DM Sans', sans-serif";
+
+// ── Category colour mapping ───────────────────────────────────────────────
 const CATEGORY_COLORS = {
-  academic:   { bg: 'bg-indigo-50',  text: 'text-indigo-700',  dot: 'bg-indigo-500' },
-  library:    { bg: 'bg-green-50',   text: 'text-green-700',   dot: 'bg-green-500'  },
-  it:         { bg: 'bg-cyan-50',    text: 'text-cyan-700',    dot: 'bg-cyan-500'   },
-  facilities: { bg: 'bg-orange-50',  text: 'text-orange-700',  dot: 'bg-orange-500' },
-  canteen:    { bg: 'bg-yellow-50',  text: 'text-yellow-700',  dot: 'bg-yellow-500' },
-  transport:  { bg: 'bg-purple-50',  text: 'text-purple-700',  dot: 'bg-purple-500' },
-  hostel:     { bg: 'bg-rose-50',    text: 'text-rose-700',    dot: 'bg-rose-500'   },
-  admin:      { bg: 'bg-slate-50',   text: 'text-slate-600',   dot: 'bg-slate-400'  },
-  other:      { bg: 'bg-slate-50',   text: 'text-slate-600',   dot: 'bg-slate-400'  },
+  academic:   { stroke: '#6366F1', bg: 'rgba(99,102,241,0.08)',  text: '#4338CA' },
+  library:    { stroke: '#22C55E', bg: 'rgba(34,197,94,0.08)',   text: '#15803D' },
+  it:         { stroke: '#06B6D4', bg: 'rgba(6,182,212,0.08)',   text: '#0E7490' },
+  facilities: { stroke: '#F59E0B', bg: 'rgba(245,158,11,0.08)',  text: '#B45309' },
+  canteen:    { stroke: '#EAB308', bg: 'rgba(234,179,8,0.08)',   text: '#A16207' },
+  transport:  { stroke: '#8B5CF6', bg: 'rgba(139,92,246,0.08)',  text: '#6D28D9' },
+  hostel:     { stroke: '#F43F5E', bg: 'rgba(244,63,94,0.08)',   text: '#BE123C' },
+  admin:      { stroke: '#64748B', bg: 'rgba(100,116,139,0.08)', text: '#475569' },
+  other:      { stroke: '#94A3B8', bg: 'rgba(148,163,184,0.08)', text: '#64748B' },
 };
 
-// ── Sentiment color mapping ───────────────────────────────────────────────────
-// Shows emoji + color based on Python sentiment analysis result
+// ── Sentiment colour mapping ──────────────────────────────────────────────
 const SENTIMENT_COLORS = {
-  positive: { bg: 'bg-green-50', text: 'text-green-700', label: '😊 Positive' },
-  negative: { bg: 'bg-red-50',   text: 'text-red-700',   label: '😞 Negative' },
-  neutral:  { bg: 'bg-slate-50', text: 'text-slate-600', label: '😐 Neutral'  },
+  positive: { stroke: '#22C55E', bg: 'rgba(34,197,94,0.08)',  text: '#15803D', emoji: '😊', label: 'Positive' },
+  negative: { stroke: '#EF4444', bg: 'rgba(239,68,68,0.08)',  text: '#B91C1C', emoji: '😞', label: 'Negative' },
+  neutral:  { stroke: '#94A3B8', bg: 'rgba(148,163,184,0.08)',text: '#475569', emoji: '😐', label: 'Neutral'  },
 };
 
-// ── RecentFeedback component ──────────────────────────────────────────────────
-// Shows the latest 5 feedback submissions on the dashboard
-// Displays: category badge, sentiment badge, feedback text, anonymous ID and date
-// Status badge removed — we no longer track pending/resolved per feedback
+// ── Pill component ────────────────────────────────────────────────────────
+const Pill = ({ color, children }) => (
+  <span style={{
+    display: 'inline-flex', alignItems: 'center', gap: '5px',
+    background: color.bg, borderRadius: '20px',
+    padding: '3px 9px',
+    fontSize: '11px', fontWeight: 700,
+    color: color.text, fontFamily: font,
+    whiteSpace: 'nowrap',
+    border: `1px solid ${color.stroke}28`,
+  }}>
+    {children}
+  </span>
+);
+
+// ── RecentFeedback ────────────────────────────────────────────────────────
 const RecentFeedback = ({ items }) => {
   return (
-    <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden flex flex-col h-full">
+    <div style={{
+      display: 'flex', flexDirection: 'column',
+      height: '100%', overflow: 'hidden',
+      fontFamily: font,
+    }}>
 
-      {/* ── Header ── */}
-      <div className="flex items-center justify-between px-5 py-4 bg-gradient-to-r from-indigo-600 to-indigo-500">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-xl bg-white/20 flex items-center justify-center">
-            <MessageSquare className="w-4 h-4 text-white" />
+      {/* ── Header ──────────────────────────────────────────────── */}
+      <div style={{
+        position: 'relative', overflow: 'hidden',
+        background: 'linear-gradient(135deg, #1E3A8A 0%, #2563EB 55%, #1D4ED8 100%)',
+        padding: '16px 20px',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        flexShrink: 0,
+      }}>
+        {/* mesh blob */}
+        <div style={{
+          position: 'absolute', top: '-16px', right: '-16px',
+          width: '80px', height: '80px', borderRadius: '50%',
+          background: 'rgba(255,255,255,0.07)', pointerEvents: 'none',
+        }} />
+
+        <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div style={{
+            width: '34px', height: '34px', borderRadius: '10px',
+            background: 'rgba(255,255,255,0.14)',
+            border: '1px solid rgba(255,255,255,0.2)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <MessageSquare size={16} color="#FFFFFF" />
           </div>
           <div>
-            <h2 className="text-sm font-bold text-white leading-none mb-0.5">Recent Feedback</h2>
-            <p className="text-xs text-white/65">Latest student submissions</p>
+            <h2 style={{ fontSize: '13px', fontWeight: 700, color: '#FFFFFF', margin: '0 0 2px', letterSpacing: '-0.01em' }}>
+              Recent Feedback
+            </h2>
+            <p style={{ fontSize: '11px', color: 'rgba(255,255,255,0.55)', margin: 0, fontWeight: 500 }}>
+              Latest student submissions
+            </p>
           </div>
         </div>
 
-        {/* Link to All Feedback page */}
         <Link
           to="/admin/feedback"
-          className="flex items-center gap-1 text-xs font-semibold text-white bg-white/20 hover:bg-white/30 px-3 py-1.5 rounded-full transition-colors no-underline"
+          style={{
+            position: 'relative',
+            display: 'inline-flex', alignItems: 'center', gap: '5px',
+            fontSize: '11.5px', fontWeight: 700,
+            color: '#FFFFFF',
+            background: 'rgba(255,255,255,0.14)',
+            border: '1px solid rgba(255,255,255,0.18)',
+            borderRadius: '20px', padding: '5px 12px',
+            textDecoration: 'none',
+            transition: 'all 0.15s ease',
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.22)'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.14)'; }}
         >
-          View All <ArrowRight className="w-3 h-3" />
+          View All <ArrowRight size={11} />
         </Link>
       </div>
 
-      {/* ── Feedback list ── */}
+      {/* ── Feedback list ──────────────────────────────────────── */}
       {items && items.length > 0 ? (
-        <div className="flex-1 overflow-y-auto divide-y divide-slate-50">
-          {items.map((item) => {
-            // Get color scheme for this feedback's category
-            // Falls back to 'other' colors if category not in list
-            const catColor  = CATEGORY_COLORS[item.category]  || CATEGORY_COLORS.other;
-
-            // Get color scheme for sentiment
-            // Falls back to neutral if sentiment not yet processed
-            const sentColor = SENTIMENT_COLORS[item.sentiment] || SENTIMENT_COLORS.neutral;
+        <div style={{ flex: 1, overflowY: 'auto' }}>
+          {items.map((item, idx) => {
+            const catKey  = item.category?.toLowerCase();
+            const sentKey = item.sentiment?.toLowerCase();
+            const cat  = CATEGORY_COLORS[catKey]  || CATEGORY_COLORS.other;
+            const sent = SENTIMENT_COLORS[sentKey] || SENTIMENT_COLORS.neutral;
+            const isLast = idx === items.length - 1;
 
             return (
               <div
                 key={item._id || item.id}
-                className="px-5 py-3.5 hover:bg-slate-50 transition-colors cursor-pointer"
+                style={{
+                  padding: '14px 20px',
+                  borderBottom: isLast ? 'none' : '1px solid #F8FAFC',
+                  transition: 'background 0.15s ease',
+                  cursor: 'pointer',
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.background = '#F8FAFC'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
               >
-                {/* ── Badges row: category + sentiment ── */}
-                {/* Status badge removed — no longer tracking pending/resolved */}
-                <div className="flex items-center gap-1.5 flex-wrap mb-2">
-
-                  {/* Category badge with colored dot */}
-                  <span className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold ${catColor.bg} ${catColor.text}`}>
-                    <span className={`w-1.5 h-1.5 rounded-full ${catColor.dot} flex-shrink-0`} />
+                {/* Badges */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', marginBottom: '8px' }}>
+                  <Pill color={cat}>
+                    <span style={{
+                      width: '5px', height: '5px', borderRadius: '50%',
+                      background: cat.stroke, flexShrink: 0,
+                    }} />
                     {item.category}
-                  </span>
-
-                  {/* Sentiment badge with emoji */}
-                  <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${sentColor.bg} ${sentColor.text}`}>
-                    {sentColor.label}
-                  </span>
-
+                  </Pill>
+                  <Pill color={sent}>
+                    {sent.emoji} {sent.label}
+                  </Pill>
                 </div>
 
-                {/* ── Feedback text preview ── */}
-                {/* line-clamp-2 limits to 2 lines — admin reads full text in All Feedback page */}
-                <p className="text-sm text-slate-700 leading-snug mb-2.5 line-clamp-2">
+                {/* Feedback text */}
+                <p style={{
+                  fontSize: '12.5px', color: '#334155',
+                  lineHeight: '1.55', margin: '0 0 10px',
+                  display: '-webkit-box',
+                  WebkitLineClamp: 2,
+                  WebkitBoxOrient: 'vertical',
+                  overflow: 'hidden',
+                }}>
                   {item.feedback || item.text}
                 </p>
 
-                {/* ── Meta row: anonymous ID + date ── */}
-                <div className="flex items-center gap-4">
-
-                  {/* Anonymous ID e.g. FB-A1B2C3D4E */}
-                  <div className="flex items-center gap-1">
-                    <Hash className="w-3 h-3 text-slate-400" />
-                    <span className="text-xs text-slate-400 font-medium">{item.anonymous_id}</span>
+                {/* Meta row */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <Hash size={11} color="#CBD5E1" />
+                    <span style={{ fontSize: '11px', color: '#94A3B8', fontWeight: 500 }}>
+                      {item.anonymous_id}
+                    </span>
                   </div>
-
-                  {/* Submission date */}
-                  <div className="flex items-center gap-1">
-                    <Clock className="w-3 h-3 text-slate-400" />
-                    <span className="text-xs text-slate-400">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <Clock size={11} color="#CBD5E1" />
+                    <span style={{ fontSize: '11px', color: '#94A3B8' }}>
                       {item.createdAt
                         ? new Date(item.createdAt).toLocaleDateString([], { month: 'short', day: 'numeric' })
                         : 'Just now'}
                     </span>
                   </div>
-
                 </div>
               </div>
             );
           })}
         </div>
       ) : (
-        /* ── Empty state — shown when no feedback exists yet ── */
-        <div className="flex-1 flex flex-col items-center justify-center py-12 gap-3 bg-slate-50/50">
-          <div className="w-12 h-12 rounded-full bg-indigo-50 flex items-center justify-center">
-            <MessageSquare className="w-6 h-6 text-indigo-500" />
+        /* Empty state */
+        <div style={{
+          flex: 1, display: 'flex', flexDirection: 'column',
+          alignItems: 'center', justifyContent: 'center',
+          gap: '12px', padding: '40px 24px', textAlign: 'center',
+          background: '#FAFBFC',
+        }}>
+          <div style={{
+            width: '48px', height: '48px', borderRadius: '14px',
+            background: 'linear-gradient(135deg, #EFF6FF 0%, #DBEAFE 100%)',
+            border: '1px solid #BFDBFE',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            boxShadow: '0 4px 12px rgba(37,99,235,0.10)',
+          }}>
+            <MessageSquare size={22} color="#2563EB" />
           </div>
-          <p className="text-sm font-semibold text-slate-700">No feedback yet</p>
-          <p className="text-xs text-slate-400 text-center max-w-xs">
+          <p style={{ fontSize: '13px', fontWeight: 700, color: '#334155', margin: 0 }}>
+            No feedback yet
+          </p>
+          <p style={{ fontSize: '12px', color: '#94A3B8', margin: 0, maxWidth: '200px', lineHeight: '1.5' }}>
             When students submit feedback, it will appear here.
           </p>
         </div>

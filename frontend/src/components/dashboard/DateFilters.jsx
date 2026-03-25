@@ -1,90 +1,92 @@
-import { Calendar, Clock } from 'lucide-react';
+import { Calendar, Clock, ChevronRight } from 'lucide-react';
 
 const filters = [
-  { key: 'all',      label: 'All Time',     short: 'All',  icon: '∞' },
-  { key: '7days',    label: 'Last 7 Days',  short: '7d',   icon: '7' },
-  { key: '30days',   label: 'Last 30 Days', short: '30d',  icon: '30' },
-  { key: 'semester', label: 'Semester',     short: 'Sem',  icon: '◑' },
+  { key: 'all', label: 'All Time', short: 'All', desc: 'Every submission' },
+  { key: '7days', label: 'Last 7 Days', short: '7d', desc: 'Past week' },
+  { key: '30days', label: 'Last 30 Days', short: '30d', desc: 'Past month' },
+  { key: 'semester', label: 'This Semester', short: 'Sem', desc: 'Academic period' },
 ];
 
 const DateFilters = ({ currentFilter, onFilterChange }) => {
-  const active = filters.find(f => f.key === currentFilter) || filters[0];
+  const active = filters.find((f) => f.key === currentFilter) || filters[0];
 
   return (
-    <div className="group relative bg-gradient-to-br from-indigo-600 via-purple-600 to-indigo-700 rounded-3xl p-6 h-full flex flex-col gap-6 overflow-hidden shadow-2xl shadow-indigo-500/25 hover:shadow-3xl hover:shadow-indigo-500/40 transition-all duration-500 backdrop-blur-xl border border-white/20">
-      
-      {/* Enhanced Decorative Elements */}
-      <div className="absolute top-0 -right-8 w-24 h-24 bg-white/10 rounded-full blur-xl animate-pulse" />
-      <div className="absolute bottom-0 left-4 w-20 h-20 bg-white/5 rounded-full blur-lg [animation:custom-bounce_4s_ease-in-out_infinite]" />
-      <div className="absolute inset-0 bg-gradient-to-t from-black/10 via-transparent to-transparent pointer-events-none" />
-      
+    <div className="flex h-full flex-col font-sans">
       {/* Header */}
-      <div className="relative z-10 flex items-center gap-3">
-        <div className="w-10 h-10 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center ring-1 ring-white/30 shadow-lg group-hover:scale-105 transition-transform duration-300">
-          <Calendar size={16} className="text-white drop-shadow-sm" />
+      <div className="mb-[18px] flex items-center gap-3">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[11px] border border-[#BFDBFE] bg-gradient-to-br from-[#EFF6FF] to-[#DBEAFE] shadow-[0_3px_8px_rgba(37,99,235,0.10)]">
+          <Calendar size={16} color="#2563EB" />
         </div>
+
         <div>
-          <p className="text-sm font-bold text-white drop-shadow-md tracking-tight">
+          <p className="m-0 text-[13px] font-bold tracking-[-0.02em] text-[#0F172A]">
             Time Period
           </p>
-          <p className="text-xs text-indigo-100/80 font-medium tracking-wide">
-            Filter feedback by date
+          <p className="mt-[2px] text-[11px] font-medium text-[#94A3B8]">
+            Filter feedback by date range
           </p>
         </div>
       </div>
 
-      {/* Premium Filter Chip Selector */}
-      <div className="relative z-10 bg-black/20 backdrop-blur-xl rounded-2xl p-2 shadow-xl ring-1 ring-white/20">
-        <div className="grid grid-cols-4 gap-2">
-          {filters.map((filter) => {
-            const isActive = currentFilter === filter.key;
-            return (
-              <button
-                key={filter.key}
-                onClick={() => onFilterChange(filter.key)}
-                title={filter.label}
-                className={`relative p-3 rounded-xl font-bold text-xs uppercase tracking-wider transition-all duration-300 hover:scale-105 active:scale-[0.97] ${
-                  isActive
-                    ? 'bg-white text-indigo-700 shadow-2xl shadow-indigo-300/50 ring-4 ring-indigo-200/50 !scale-105'
-                    : 'text-white/80 hover:text-white hover:bg-white/20 backdrop-blur-sm'
-                }`}
+      {/* Filter tiles */}
+      <div className="grid flex-1 grid-cols-2 gap-2">
+        {filters.map((filter) => {
+          const isActive = currentFilter === filter.key;
+
+          return (
+            <button
+              key={filter.key}
+              onClick={() => onFilterChange(filter.key)}
+              title={filter.label}
+              className={[
+                'relative flex flex-col items-start justify-between overflow-hidden rounded-[13px] px-3 pb-[10px] pt-[11px] transition-all duration-150 ease-in-out',
+                isActive
+                  ? 'border-[1.5px] border-[#2563EB] bg-gradient-to-br from-[#2563EB] to-[#1D4ED8] shadow-[0_6px_16px_rgba(37,99,235,0.22),inset_0_1px_0_rgba(255,255,255,0.12)]'
+                  : 'border border-[#E2E8F0] bg-[#FAFBFC] shadow-[0_1px_2px_rgba(15,23,42,0.04)] hover:-translate-y-[1px] hover:border-[#93C5FD] hover:bg-[#EFF6FF] hover:shadow-[0_4px_12px_rgba(37,99,235,0.09)]',
+              ].join(' ')}
+            >
+              {isActive && (
+                <div className="pointer-events-none absolute right-[-8px] top-[-8px] h-[52px] w-[52px] rounded-full bg-[rgba(255,255,255,0.09)]" />
+              )}
+
+              <span
+                className={[
+                  'relative mb-[5px] text-[18px] font-extrabold leading-none tracking-[-0.04em]',
+                  isActive ? 'text-white' : 'text-[#0F172A]',
+                ].join(' ')}
               >
-                {isActive && (
-                  <div className="absolute inset-0 bg-gradient-to-r from-indigo-400 to-purple-400 blur opacity-75 animate-pulse rounded-[inherit]" />
-                )}
-                <span className="relative z-10">{filter.short}</span>
-              </button>
-            );
-          })}
-        </div>
+                {filter.short}
+              </span>
+
+              <span
+                className={[
+                  'relative text-[10px] font-medium leading-none tracking-[0.01em]',
+                  isActive ? 'text-[rgba(255,255,255,0.65)]' : 'text-[#94A3B8]',
+                ].join(' ')}
+              >
+                {filter.desc}
+              </span>
+            </button>
+          );
+        })}
       </div>
 
-      {/* Active Filter Display */}
-      <div className="relative z-10 flex items-center justify-between pt-4 mt-auto border-t border-white/20">
-        <div className="flex items-center gap-1.5">
-          <div className="w-4 h-4 p-1 bg-white/20 rounded-lg backdrop-blur-sm flex items-center justify-center">
-            <Clock size={10} className="text-white/70" />
+      {/* Active summary footer */}
+      <div className="mt-[14px] flex items-center justify-between gap-2 border-t border-[#F1F5F9] pt-[13px]">
+        <div className="flex items-center gap-[7px]">
+          <div className="flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-[7px] border border-[#E2E8F0] bg-[#F8FAFC]">
+            <Clock size={12} color="#94A3B8" />
           </div>
-          <span className="text-xs text-white/70 font-medium tracking-wide">
-            Showing
+          <span className="text-[11px] font-medium text-[#94A3B8]">
+            Now showing
           </span>
         </div>
-        
-        <span className="group/active relative px-4 py-1.5 bg-white/90 backdrop-blur-xl text-indigo-700 text-xs font-bold uppercase tracking-wider rounded-full shadow-lg ring-1 ring-white/50 hover:shadow-xl hover:shadow-indigo-100/50 hover:scale-105 hover:bg-white transition-all duration-300 overflow-hidden">
+
+        <span className="inline-flex items-center gap-[3px] whitespace-nowrap rounded-[20px] border border-[#DBEAFE] bg-[#EFF6FF] px-[11px] py-[3px] pr-[9px] text-[11px] font-bold tracking-[-0.01em] text-[#2563EB]">
           {active.label}
-          <div className="absolute inset-0 bg-gradient-to-r from-indigo-400/20 to-purple-400/20 rounded-full blur opacity-0 group-hover/active:opacity-100 transition-opacity duration-300" />
+          <ChevronRight size={11} strokeWidth={2.5} />
         </span>
       </div>
-
-      <style jsx>{`
-        @keyframes custom-bounce {
-          0%, 100% { transform: translateY(0px) scale(1); }
-          50% { transform: translateY(-8px) scale(1.05); }
-        }
-        [animation="custom-bounce_4s_ease-in-out_infinite"] {
-          animation: custom-bounce 4s ease-in-out infinite;
-        }
-      `}</style>
     </div>
   );
 };

@@ -1,76 +1,233 @@
 import { Link } from 'react-router-dom';
-import { Bot, ArrowRight, Sparkles, Zap } from 'lucide-react';
+import { Bot, ArrowRight, Sparkles, Zap, Shield, TrendingUp, FileText, Search } from 'lucide-react';
 
-const features = ['Category Search', 'Auto Summary', 'Trend Detection', '100% Private'];
+const font = "'Plus Jakarta Sans', 'DM Sans', sans-serif";
+
+const features = [
+  { label: 'Category Search', icon: Search },
+  { label: 'Auto Summary',    icon: FileText },
+  { label: 'Trend Detection', icon: TrendingUp },
+  { label: '100% Private',    icon: Shield },
+];
 
 const AiCTA = () => {
   return (
-    <div className="relative overflow-hidden rounded-2xl px-8 py-8 flex flex-wrap items-center justify-between gap-6 shadow-xl shadow-indigo-500/30"
-      style={{ background: 'linear-gradient(135deg, #312e81 0%, #4f46e5 35%, #7c3aed 70%, #9333ea 100%)' }}
+    <div
+      style={{
+        position: 'relative',
+        overflow: 'hidden',
+        borderRadius: '20px',
+        padding: '32px 36px',
+        display: 'flex',
+        flexWrap: 'wrap',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: '28px',
+        background: 'linear-gradient(135deg, #1E3A8A 0%, #2563EB 45%, #1D4ED8 100%)',
+        boxShadow: '0 20px 56px rgba(37,99,235,0.32), inset 0 1px 0 rgba(255,255,255,0.1)',
+        fontFamily: font,
+      }}
     >
-
-      {/* Decorative blobs */}
-      <div className="absolute -top-10 -right-10 w-48 h-48 rounded-full bg-white/10 pointer-events-none" />
-      <div className="absolute -bottom-12 left-[10%] w-40 h-40 rounded-full bg-white/5 pointer-events-none" />
-      <div className="absolute top-5 left-[40%] w-20 h-20 rounded-full bg-white/5 pointer-events-none" />
+      {/* ── Background decoration ─────────────────────────────────────── */}
+      {/* Large soft blob top-right */}
+      <div style={{
+        position: 'absolute', top: '-40px', right: '-40px',
+        width: '220px', height: '220px', borderRadius: '50%',
+        background: 'rgba(255,255,255,0.06)', pointerEvents: 'none',
+      }} />
+      {/* Small blob bottom-left */}
+      <div style={{
+        position: 'absolute', bottom: '-48px', left: '8%',
+        width: '160px', height: '160px', borderRadius: '50%',
+        background: 'rgba(255,255,255,0.04)', pointerEvents: 'none',
+      }} />
+      {/* Thin grid lines overlay */}
+      <div style={{
+        position: 'absolute', inset: 0, pointerEvents: 'none',
+        backgroundImage: 'linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px)',
+        backgroundSize: '40px 40px',
+      }} />
 
       {/* Floating sparkles */}
-      <div className="absolute top-5 right-56 pointer-events-none animate-bounce">
-        <Sparkles className="w-3.5 h-3.5 text-white/40" />
+      <div style={{
+        position: 'absolute', top: '18px', right: '220px',
+        pointerEvents: 'none', animation: 'floatA 3s ease-in-out infinite',
+      }}>
+        <Sparkles size={14} color="rgba(255,255,255,0.35)" />
       </div>
-      <div className="absolute bottom-5 right-80 pointer-events-none animate-pulse">
-        <Sparkles className="w-2.5 h-2.5 text-white/30" />
+      <div style={{
+        position: 'absolute', bottom: '20px', right: '320px',
+        pointerEvents: 'none', animation: 'floatB 4s ease-in-out infinite',
+      }}>
+        <Sparkles size={10} color="rgba(255,255,255,0.22)" />
       </div>
 
-      {/* Left — icon + text */}
-      <div className="relative flex items-center gap-5 flex-1 min-w-0">
-
-        {/* Icon */}
-        <div className="w-14 h-14 rounded-2xl bg-white/15 border border-white/20 backdrop-blur-sm flex items-center justify-center flex-shrink-0">
-          <Bot className="w-7 h-7 text-white" />
+      {/* ── LEFT: Icon + Copy ─────────────────────────────────────────── */}
+      <div
+        style={{
+          position: 'relative',
+          display: 'flex',
+          alignItems: 'flex-start',
+          gap: '20px',
+          flex: 1,
+          minWidth: 0,
+        }}
+      >
+        {/* Bot icon tile */}
+        <div
+          style={{
+            width: '56px',
+            height: '56px',
+            borderRadius: '16px',
+            background: 'rgba(255,255,255,0.12)',
+            border: '1px solid rgba(255,255,255,0.2)',
+            backdropFilter: 'blur(8px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            flexShrink: 0,
+            boxShadow: '0 4px 16px rgba(0,0,0,0.12), inset 0 1px 0 rgba(255,255,255,0.15)',
+          }}
+        >
+          <Bot size={26} color="#FFFFFF" />
         </div>
 
-        <div className="min-w-0">
-          {/* Title + badge */}
-          <div className="flex items-center gap-2 flex-wrap mb-1.5">
-            <h3 className="text-xl font-extrabold text-white tracking-tight">
+        <div style={{ minWidth: 0 }}>
+          {/* Title row */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '10px',
+              flexWrap: 'wrap',
+              marginBottom: '8px',
+            }}
+          >
+            <h3
+              style={{
+                fontSize: '20px',
+                fontWeight: 800,
+                color: '#FFFFFF',
+                letterSpacing: '-0.03em',
+                margin: 0,
+                lineHeight: 1.2,
+              }}
+            >
               Unlock Deeper Insights
             </h3>
-            <div className="flex items-center gap-1 bg-white/15 px-2 py-0.5 rounded-full">
-              <Zap className="w-2.5 h-2.5 text-amber-300" />
-              <span className="text-xs font-bold text-amber-200">AI Powered</span>
-            </div>
+
+            {/* AI badge */}
+            <span
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '5px',
+                background: 'rgba(251,191,36,0.18)',
+                border: '1px solid rgba(251,191,36,0.3)',
+                borderRadius: '20px',
+                padding: '3px 10px',
+                fontSize: '11px',
+                fontWeight: 700,
+                color: '#FCD34D',
+                letterSpacing: '0.02em',
+              }}
+            >
+              <Zap size={10} color="#FCD34D" />
+              AI Powered
+            </span>
           </div>
 
           {/* Description */}
-          <p className="text-sm text-white/75 leading-relaxed max-w-md">
+          <p
+            style={{
+              fontSize: '13.5px',
+              color: 'rgba(255,255,255,0.72)',
+              lineHeight: '1.65',
+              margin: '0 0 16px',
+              maxWidth: '480px',
+            }}
+          >
             Ask questions, discover trends, and get instant summaries from student feedback — powered by local AI running on your machine.
           </p>
 
           {/* Feature pills */}
-          <div className="flex flex-wrap gap-2 mt-3">
-            {features.map((feat) => (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+            {features.map(({ label, icon: Icon }) => (
               <span
-                key={feat}
-                className="text-xs font-semibold text-white/85 bg-white/10 border border-white/15 px-2.5 py-1 rounded-full"
+                key={label}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                  background: 'rgba(255,255,255,0.10)',
+                  border: '1px solid rgba(255,255,255,0.14)',
+                  borderRadius: '20px',
+                  padding: '4px 11px',
+                  fontSize: '11.5px',
+                  fontWeight: 600,
+                  color: 'rgba(255,255,255,0.88)',
+                  letterSpacing: '-0.01em',
+                  backdropFilter: 'blur(4px)',
+                }}
               >
-                {feat}
+                <Icon size={11} color="rgba(255,255,255,0.65)" />
+                {label}
               </span>
             ))}
           </div>
         </div>
       </div>
 
-      {/* Right — CTA button */}
+      {/* ── RIGHT: CTA button ─────────────────────────────────────────── */}
       <Link
         to="/admin/chat"
-        className="relative flex-shrink-0 inline-flex items-center gap-2.5 px-7 py-3.5 rounded-xl bg-white text-indigo-600 text-sm font-extrabold shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all whitespace-nowrap no-underline"
+        style={{
+          position: 'relative',
+          flexShrink: 0,
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: '9px',
+          padding: '13px 24px',
+          borderRadius: '14px',
+          background: '#FFFFFF',
+          color: '#1D4ED8',
+          fontSize: '14px',
+          fontWeight: 800,
+          fontFamily: font,
+          letterSpacing: '-0.02em',
+          textDecoration: 'none',
+          whiteSpace: 'nowrap',
+          boxShadow: '0 6px 20px rgba(0,0,0,0.14), inset 0 1px 0 rgba(255,255,255,0.9)',
+          transition: 'all 0.2s ease',
+          border: '1px solid rgba(255,255,255,0.9)',
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.transform = 'translateY(-2px)';
+          e.currentTarget.style.boxShadow = '0 10px 28px rgba(0,0,0,0.18), inset 0 1px 0 rgba(255,255,255,0.9)';
+          e.currentTarget.style.color = '#1E40AF';
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.transform = 'translateY(0)';
+          e.currentTarget.style.boxShadow = '0 6px 20px rgba(0,0,0,0.14), inset 0 1px 0 rgba(255,255,255,0.9)';
+          e.currentTarget.style.color = '#1D4ED8';
+        }}
       >
-        <Bot className="w-4 h-4" />
+        <Bot size={15} />
         Ask AI Now
-        <ArrowRight className="w-4 h-4" />
+        <ArrowRight size={14} />
       </Link>
 
+      {/* Keyframes */}
+      <style>{`
+        @keyframes floatA {
+          0%, 100% { transform: translateY(0px) rotate(0deg); opacity: 0.35; }
+          50%       { transform: translateY(-6px) rotate(15deg); opacity: 0.55; }
+        }
+        @keyframes floatB {
+          0%, 100% { transform: translateY(0px); opacity: 0.22; }
+          50%       { transform: translateY(-4px); opacity: 0.38; }
+        }
+      `}</style>
     </div>
   );
 };

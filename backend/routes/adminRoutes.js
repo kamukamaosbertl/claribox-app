@@ -276,6 +276,7 @@ router.get('/feedback', auth, async (req, res) => {
 });
 
 // GET /api/admin/analytics — dashboard stats with date filtering
+// GET /api/admin/analytics — dashboard stats with date filtering
 router.get('/analytics', auth, async (req, res) => {
   try {
     const { filter } = req.query;
@@ -285,21 +286,41 @@ router.get('/analytics', auth, async (req, res) => {
     console.log('Filter received:', filter);
     console.log('Match query:', matchQuery);
 
-    const [total, positive, neutral, negative] = await Promise.all([
+    // Weekly comparison windows
+    const thisWeekStart = new Date();
+    thisWeekStart.setDate(thisWeekStart.getDate() - 7);
+
+    const lastWeekStart = new Date();
+    lastWeekStart.setDate(lastWeekStart.getDate() - 14);
+
+    const lastWeekEnd = new Date();
+    lastWeekEnd.setDate(lastWeekEnd.getDate() - 7);
+
+    const [
+      total,
+      positive,
+      neutral,
+      negative,
+      resolved,
+      thisWeekCount,
+      lastWeekCount,
+      categoryStats,
+      timeStats
+    ] = await Promise.all([
       Feedback.countDocuments(matchQuery),
       Feedback.countDocuments({ ...matchQuery, sentiment: 'positive' }),
-      Feedback.countDocuments({ ...matchQuery, sentiment: 'neutral'  }),
+      Feedback.countDocuments({ ...matchQuery, sentiment: 'neutral' }),
       Feedback.countDocuments({ ...matchQuery, sentiment: 'negative' }),
-    ]);
-
-    const resolved = await Resolution.countDocuments({
-      ...matchQuery,
-      isPublished: true
-    });
-
-    const overallScore = total > 0 ? (positive - negative) / total : 0;
-
-    const [categoryStats, timeStats] = await Promise.all([
+      Resolution.countDocuments({
+        ...matchQuery,
+        isPublished: true
+      }),
+      Feedback.countDocuments({
+        createdAt: { $gte: thisWeekStart }
+      }),
+      Feedback.countDocuments({
+        createdAt: { $gte: lastWeekStart, $lte: lastWeekEnd }
+      }),
       Feedback.aggregate([
         { $match: matchQuery },
         { $group: { _id: '$category', count: { $sum: 1 } } },
@@ -307,18 +328,44 @@ router.get('/analytics', auth, async (req, res) => {
       ]),
       Feedback.aggregate([
         { $match: matchQuery },
-        { $group: { _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } }, feedback: { $sum: 1 } } },
+        {
+          $group: {
+            _id: {
+              $dateToString: { format: '%Y-%m-%d', date: '$createdAt' }
+            },
+            feedback: { $sum: 1 }
+          }
+        },
         { $sort: { _id: 1 } },
         { $limit: 30 }
       ])
     ]);
 
+    const overallScore = total > 0 ? (positive - negative) / total : 0;
+
     res.json({
-      success:      true,
-      stats:        { total, resolved },
-      sentiment:    { positive, neutral, negative, overallScore: Math.round(overallScore * 100) / 100 },
-      categoryData: categoryStats.map(c => ({ name: c._id, count: c.count, value: c.count })),
-      timeData:     timeStats.map(t => ({ date: t._id, feedback: t.feedback }))
+      success: true,
+      stats: {
+        total,
+        resolved,
+        thisWeekCount,
+        lastWeekCount
+      },
+      sentiment: {
+        positive,
+        neutral,
+        negative,
+        overallScore: Math.round(overallScore * 100) / 100
+      },
+      categoryData: categoryStats.map(c => ({
+        name: c._id,
+        count: c.count,
+        value: c.count
+      })),
+      timeData: timeStats.map(t => ({
+        date: t._id,
+        feedback: t.feedback
+      }))
     });
   } catch (error) {
     console.error('Analytics error:', error);

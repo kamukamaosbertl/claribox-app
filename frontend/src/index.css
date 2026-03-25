@@ -2,6 +2,194 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ── Google Font ──────────────────────────────────────────────────────────── */
+
+
+/* ── Base overrides ───────────────────────────────────────────────────────── */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
 body {
-  @apply bg-gray-50 text-gray-900;
+  @apply bg-[#F4F7FB] text-[#0F172A];
+  font-family: 'Plus Jakarta Sans', 'DM Sans', system-ui, sans-serif;
+  line-height: 1.5;
+}
+
+#root {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── Typography ───────────────────────────────────────────────────────────── */
+h1, h2, h3, h4, h5, h6 {
+  font-family: 'Plus Jakarta Sans', 'DM Sans', system-ui, sans-serif;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  line-height: 1.2;
+  color: #0F172A;
+}
+
+a {
+  color: #2563EB;
+  text-decoration: none;
+  transition: color 0.15s ease;
+}
+
+a:hover {
+  color: #1D4ED8;
+}
+
+input,
+textarea,
+select,
+button {
+  font-family: 'Plus Jakarta Sans', 'DM Sans', system-ui, sans-serif;
+}
+
+/* ── Scrollbar — webkit ───────────────────────────────────────────────────── */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #CBD5E1;
+  border-radius: 99px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94A3B8;
+}
+
+/* ── Scrollbar — Firefox ──────────────────────────────────────────────────── */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #CBD5E1 transparent;
+}
+
+/* ── Shared keyframes ─────────────────────────────────────────────────────── */
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.5; }
+}
+
+@keyframes ping {
+  0%   { transform: scale(1);   opacity: 0.4; }
+  70%  { transform: scale(2);   opacity: 0;   }
+  100% { transform: scale(2);   opacity: 0;   }
+}
+
+@keyframes bounce {
+  0%, 100% { transform: translateY(0);   }
+  50%       { transform: translateY(-5px); }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0;                     }
+  to   { opacity: 1;                     }
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(8px);              }
+  to   { opacity: 1; transform: translateY(0);                }
+}
+
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-8px);             }
+  to   { opacity: 1; transform: translateY(0);                }
+}
+
+@keyframes modalIn {
+  from { opacity: 0; transform: scale(0.96) translateY(12px); }
+  to   { opacity: 1; transform: scale(1)    translateY(0);    }
+}
+
+@keyframes dropIn {
+  from { opacity: 0; transform: translateY(-6px) scale(0.98); }
+  to   { opacity: 1; transform: translateY(0)    scale(1);    }
+}
+
+@keyframes cursorBlink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0; }
+}
+
+@keyframes floatA {
+  0%, 100% { transform: translateY(0px)  rotate(0deg);  opacity: 0.35; }
+  50%       { transform: translateY(-6px) rotate(15deg); opacity: 0.55; }
+}
+
+@keyframes floatB {
+  0%, 100% { transform: translateY(0px);  opacity: 0.22; }
+  50%       { transform: translateY(-4px); opacity: 0.38; }
+}
+
+/* ── Utility classes used by components ───────────────────────────────────── */
+.line-clamp-1 {
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.line-clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.line-clamp-3 {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* ── Stats/filter grid — responsive layout (Dashboard.jsx) ───────────────── */
+.stats-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 20px;
+  align-items: start;
+}
+
+@media (min-width: 1024px) {
+  .stats-grid {
+    grid-template-columns: 3fr 1fr;
+  }
+}
+
+/* ── Navbar mobile slide-down animation ──────────────────────────────────── */
+.animate-slideDown {
+  animation: slideDown 0.18s ease;
+}
+
+/* ── Print — hide UI chrome when saving as PDF ───────────────────────────── */
+@media print {
+  .no-print {
+    display: none !important;
+  }
+
+  body {
+    background: white !important;
+  }
 }

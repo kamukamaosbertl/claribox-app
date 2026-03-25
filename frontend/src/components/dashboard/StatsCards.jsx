@@ -1,103 +1,398 @@
 import { MessageSquare, CheckCircle, ArrowRight, TrendingUp } from 'lucide-react';
 
-const StatsCards = ({ stats, type = 'all', onResolvedClick }) => {
-  if (!stats) {
-    return (
-      <div className="h-[160px] bg-gradient-to-br from-slate-50/80 to-indigo-50/60 backdrop-blur-xl border-2 border-dashed border-indigo-200 rounded-3xl flex flex-col items-center justify-center gap-3 shadow-lg animate-pulse">
-        <div className="w-12 h-12 bg-indigo-100/50 rounded-2xl flex items-center justify-center backdrop-blur-sm">
-          <MessageSquare size={24} className="text-indigo-400" />
-        </div>
-        <span className="text-sm font-semibold text-indigo-500 tracking-wide">Loading stats...</span>
-      </div>
-    );
-  }
+// ── Shared tokens (mirrors Dashboard.jsx tokens) ──────────────────────────
+const font = "'Plus Jakarta Sans', 'DM Sans', sans-serif";
 
-  const resolvedPercent = stats.total > 0
-    ? Math.round((stats.resolved / stats.total) * 100)
-    : 0;
-  /* ---- RESOLVED CARD ---- */
-  if (type === 'resolved') {
-    return (
-      <div
-        onClick={onResolvedClick}
-        className="group relative bg-gradient-to-br from-emerald-500 via-emerald-600 to-teal-600 rounded-3xl p-8 shadow-2xl shadow-emerald-500/30 hover:shadow-3xl hover:shadow-emerald-500/50 hover:-translate-y-2 active:scale-[0.98] transition-all duration-500 cursor-pointer overflow-hidden h-full border border-white/20 backdrop-blur-xl hover:border-white/40"
-      >
-        {/* Premium decorative orbs */}
-        <div className="absolute top-0 -right-6 w-24 h-24 bg-white/15 rounded-full blur-xl animate-pulse" />
-        <div className="absolute bottom-0 left-6 w-20 h-20 bg-white/10 rounded-full blur-lg [animation:bounce_3s_ease-in-out_infinite]" />
-        
-        {/* Shine overlay */}
-        <div className="absolute inset-0 bg-gradient-to-r from-white/10 via-transparent to-white/5 -skew-x-12 -translate-x-[-120%] group-hover:translate-x-[120%] transition-transform duration-1000" />
+// ── Skeleton / loading card ───────────────────────────────────────────────
+const LoadingSkeleton = () => (
+  <div
+    style={{
+      height: '160px',
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: '12px',
+      borderRadius: '20px',
+      border: '1.5px dashed #D9E3F0',
+      background: '#FFFFFF',
+      padding: '24px',
+      boxShadow: '0 8px 24px rgba(15,23,42,0.04)',
+      animation: 'pulse 1.8s ease-in-out infinite',
+      fontFamily: font,
+    }}
+  >
+    <div
+      style={{
+        width: '44px',
+        height: '44px',
+        borderRadius: '12px',
+        background: '#EFF6FF',
+        border: '1px solid #DBEAFE',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}
+    >
+      <MessageSquare size={20} color="#93C5FD" />
+    </div>
+    <span
+      style={{
+        fontSize: '12px',
+        fontWeight: 600,
+        color: '#94A3B8',
+        letterSpacing: '-0.01em',
+      }}
+    >
+      Loading stats…
+    </span>
 
-        <div className="relative z-10">
-          {/* Header */}
-          <div className="flex justify-between items-start mb-6 gap-4">
-            <div className="min-w-0 flex-1">
-              <p className="text-xs font-bold uppercase tracking-wider text-emerald-200/90 mb-2">
-                Resolved Issues
-              </p>
-              <div className="flex items-baseline gap-3">
-                <h3 className="text-4xl lg:text-5xl font-black text-white drop-shadow-2xl leading-none">
-                  {stats.resolved || 0}
-                </h3>
-                <span className="text-sm font-bold bg-white/25 backdrop-blur-sm text-white px-3 py-1 rounded-full shadow-lg">
-                  {resolvedPercent}%
-                </span>
-              </div>
-            </div>
-            <div className="w-14 h-14 bg-white/20 backdrop-blur-sm rounded-2xl flex items-center justify-center ring-1 ring-white/30 shadow-xl group-hover:scale-110 transition-all duration-300">
-              <CheckCircle size={24} className="text-white drop-shadow-lg" />
-            </div>
-          </div>
+    <style>{`
+      @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.55; }
+      }
+    `}</style>
+  </div>
+);
 
-          {/* Premium Progress Bar */}
-          <div className="space-y-3">
-            <div className="h-2 bg-white/30 backdrop-blur-sm rounded-full overflow-hidden shadow-inner">
-              <div 
-                className="h-full bg-gradient-to-r from-white/90 to-white rounded-full shadow-lg transition-all duration-1000 ease-out"
-                style={{ width: `${resolvedPercent}%` }}
-              />
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-emerald-100/90 tracking-wide">
-                Resolution Rate
-              </span>
-              <ArrowRight size={16} className="text-emerald-200/80 group-hover:translate-x-1 transition-transform duration-300" />
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
+// ── Resolved card ─────────────────────────────────────────────────────────
+const ResolvedCard = ({ stats, resolvedPercent, onResolvedClick }) => {
+  const handleEnter = (e) => {
+    e.currentTarget.style.transform = 'translateY(-3px)';
+    e.currentTarget.style.boxShadow = '0 16px 36px rgba(34,197,94,0.14)';
+    e.currentTarget.style.borderColor = '#86EFAC';
+  };
+  const handleLeave = (e) => {
+    e.currentTarget.style.transform = 'translateY(0)';
+    e.currentTarget.style.boxShadow = '0 8px 24px rgba(15,23,42,0.06)';
+    e.currentTarget.style.borderColor = '#BBF7D0';
+  };
 
-  /* ---- TOTAL FEEDBACK CARD (default) ---- */
   return (
-    <div className="group relative bg-gradient-to-br from-indigo-600 via-purple-600 to-indigo-700 rounded-3xl p-8 shadow-2xl shadow-indigo-500/30 hover:shadow-3xl hover:shadow-indigo-500/50 hover:-translate-y-2 active:scale-[0.98] transition-all duration-500 overflow-hidden h-full border border-white/20 backdrop-blur-xl hover:border-white/40">
-      
-      {/* Premium decorative orbs */}
-      <div className="absolute top-0 -right-6 w-28 h-28 bg-white/20 rounded-full blur-xl animate-pulse" />
-      <div className="absolute bottom-0 left-6 w-24 h-24 bg-white/10 rounded-full blur-lg [animation:bounce_4s_ease-in-out_infinite]" />
-      
-      {/* Shine overlay */}
-      <div className="absolute inset-0 bg-gradient-to-r from-white/15 via-transparent to-white/10 -skew-x-12 -translate-x-[-120%] group-hover:translate-x-[120%] transition-transform duration-1000" />
+    <button
+      type="button"
+      onClick={onResolvedClick}
+      onMouseEnter={handleEnter}
+      onMouseLeave={handleLeave}
+      style={{
+        position: 'relative',
+        width: '100%',
+        height: '100%',
+        display: 'flex',
+        flexDirection: 'column',
+        background: '#FFFFFF',
+        border: '1px solid #BBF7D0',
+        borderRadius: '20px',
+        padding: '24px',
+        textAlign: 'left',
+        cursor: 'pointer',
+        boxShadow: '0 8px 24px rgba(15,23,42,0.06)',
+        transition: 'all 0.22s ease',
+        fontFamily: font,
+        overflow: 'hidden',
+      }}
+    >
+      {/* Soft green mesh in corner */}
+      <div
+        style={{
+          position: 'absolute',
+          top: '-20px',
+          right: '-20px',
+          width: '100px',
+          height: '100px',
+          borderRadius: '50%',
+          background: 'radial-gradient(circle, rgba(34,197,94,0.08) 0%, transparent 70%)',
+          pointerEvents: 'none',
+        }}
+      />
 
-      <div className="relative z-10">
-        {/* Header */}
-        <div className="flex justify-between items-start mb-8 gap-4">
-          <div className="min-w-0 flex-1">
-            <p className="text-xs font-bold uppercase tracking-wider text-indigo-200/90 mb-3">
-              Total Feedback
-            </p>
-            <h3 className="text-4xl lg:text-5xl font-black text-white drop-shadow-2xl leading-none">
-              {stats.total || 0}
-            </h3>
-          </div>
-          <div className="w-14 h-14 bg-white/20 backdrop-blur-sm rounded-2xl flex items-center justify-center ring-1 ring-white/30 shadow-xl group-hover:scale-110 transition-all duration-300">
-            <MessageSquare size={24} className="text-white drop-shadow-lg" />
+      {/* Top row */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'flex-start',
+          justifyContent: 'space-between',
+          gap: '12px',
+          marginBottom: '20px',
+        }}
+      >
+        <div style={{ minWidth: 0, flex: 1 }}>
+          {/* Label */}
+          <p
+            style={{
+              fontSize: '10px',
+              fontWeight: 700,
+              textTransform: 'uppercase',
+              letterSpacing: '0.09em',
+              color: '#16A34A',
+              margin: '0 0 10px',
+            }}
+          >
+            Resolved Issues
+          </p>
+
+          {/* Number + percent pill */}
+          <div style={{ display: 'flex', alignItems: 'flex-end', gap: '10px' }}>
+            <span
+              style={{
+                fontSize: '42px',
+                fontWeight: 800,
+                lineHeight: 1,
+                letterSpacing: '-0.045em',
+                color: '#0F172A',
+              }}
+            >
+              {stats.resolved || 0}
+            </span>
+
+            <span
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                background: '#F0FDF4',
+                border: '1px solid #BBF7D0',
+                borderRadius: '20px',
+                padding: '3px 9px',
+                fontSize: '11px',
+                fontWeight: 700,
+                color: '#15803D',
+                marginBottom: '6px',
+              }}
+            >
+              {resolvedPercent}%
+            </span>
           </div>
         </div>
+
+        {/* Icon tile */}
+        <div
+          style={{
+            width: '52px',
+            height: '52px',
+            borderRadius: '14px',
+            background: 'linear-gradient(135deg, #DCFCE7 0%, #BBF7D0 100%)',
+            border: '1px solid #86EFAC',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            flexShrink: 0,
+            boxShadow: '0 4px 12px rgba(34,197,94,0.15)',
+          }}
+        >
+          <CheckCircle size={22} color="#16A34A" />
+        </div>
+      </div>
+
+      {/* Progress bar */}
+      <div style={{ marginTop: 'auto' }}>
+        <div
+          style={{
+            height: '6px',
+            borderRadius: '99px',
+            background: '#DCFCE7',
+            overflow: 'hidden',
+            marginBottom: '12px',
+          }}
+        >
+          <div
+            style={{
+              height: '100%',
+              width: `${resolvedPercent}%`,
+              borderRadius: '99px',
+              background: 'linear-gradient(90deg, #22C55E 0%, #16A34A 100%)',
+              transition: 'width 0.8s cubic-bezier(0.4,0,0.2,1)',
+              boxShadow: '0 0 6px rgba(34,197,94,0.4)',
+            }}
+          />
+        </div>
+
+        {/* Footer row */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+          }}
+        >
+          <span style={{ fontSize: '12px', fontWeight: 500, color: '#64748B' }}>
+            Resolution Rate
+          </span>
+          <span
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '4px',
+              fontSize: '12px',
+              fontWeight: 700,
+              color: '#16A34A',
+            }}
+          >
+            View details
+            <ArrowRight size={13} />
+          </span>
+        </div>
+      </div>
+    </button>
+  );
+};
+
+// ── Total feedback card ───────────────────────────────────────────────────
+const TotalCard = ({ stats }) => {
+  const handleEnter = (e) => {
+    e.currentTarget.style.transform = 'translateY(-3px)';
+    e.currentTarget.style.boxShadow = '0 16px 36px rgba(37,99,235,0.14)';
+    e.currentTarget.style.borderColor = '#93C5FD';
+  };
+  const handleLeave = (e) => {
+    e.currentTarget.style.transform = 'translateY(0)';
+    e.currentTarget.style.boxShadow = '0 8px 24px rgba(15,23,42,0.06)';
+    e.currentTarget.style.borderColor = '#BFDBFE';
+  };
+
+  return (
+    <div
+      onMouseEnter={handleEnter}
+      onMouseLeave={handleLeave}
+      style={{
+        position: 'relative',
+        display: 'flex',
+        flexDirection: 'column',
+        background: '#FFFFFF',
+        border: '1px solid #BFDBFE',
+        borderRadius: '20px',
+        padding: '24px',
+        boxShadow: '0 8px 24px rgba(15,23,42,0.06)',
+        transition: 'all 0.22s ease',
+        fontFamily: font,
+        overflow: 'hidden',
+      }}
+    >
+      {/* Blue mesh in corner */}
+      <div
+        style={{
+          position: 'absolute',
+          top: '-20px',
+          right: '-20px',
+          width: '110px',
+          height: '110px',
+          borderRadius: '50%',
+          background: 'radial-gradient(circle, rgba(37,99,235,0.07) 0%, transparent 70%)',
+          pointerEvents: 'none',
+        }}
+      />
+
+      {/* Top row */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'flex-start',
+          justifyContent: 'space-between',
+          gap: '12px',
+          marginBottom: '20px',
+        }}
+      >
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <p
+            style={{
+              fontSize: '10px',
+              fontWeight: 700,
+              textTransform: 'uppercase',
+              letterSpacing: '0.09em',
+              color: '#2563EB',
+              margin: '0 0 10px',
+            }}
+          >
+            Total Feedback
+          </p>
+
+          <span
+            style={{
+              fontSize: '42px',
+              fontWeight: 800,
+              lineHeight: 1,
+              letterSpacing: '-0.045em',
+              color: '#0F172A',
+            }}
+          >
+            {stats.total || 0}
+          </span>
+        </div>
+
+        {/* Icon tile */}
+        <div
+          style={{
+            width: '52px',
+            height: '52px',
+            borderRadius: '14px',
+            background: 'linear-gradient(135deg, #EFF6FF 0%, #DBEAFE 100%)',
+            border: '1px solid #BFDBFE',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            flexShrink: 0,
+            boxShadow: '0 4px 12px rgba(37,99,235,0.12)',
+          }}
+        >
+          <MessageSquare size={22} color="#2563EB" />
+        </div>
+      </div>
+
+      {/* Footer */}
+      <div
+        style={{
+          marginTop: 'auto',
+          borderTop: '1px solid #F1F5F9',
+          paddingTop: '14px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+        }}
+      >
+        <span style={{ fontSize: '12px', fontWeight: 500, color: '#64748B' }}>
+          Feedback submissions recorded
+        </span>
+        <span
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '4px',
+            fontSize: '11px',
+            fontWeight: 700,
+            color: '#2563EB',
+            background: '#EFF6FF',
+            border: '1px solid #DBEAFE',
+            borderRadius: '20px',
+            padding: '2px 8px',
+          }}
+        >
+          <TrendingUp size={11} />
+          Active
+        </span>
       </div>
     </div>
+  );
+};
+
+// ── Main export ───────────────────────────────────────────────────────────
+const StatsCards = ({ stats, type = 'all', onResolvedClick }) => {
+  if (!stats) return <LoadingSkeleton />;
+
+  const resolvedPercent =
+    stats.total > 0 ? Math.round((stats.resolved / stats.total) * 100) : 0;
+
+  if (type === 'resolved') {
+    return (
+      <ResolvedCard
+        stats={stats}
+        resolvedPercent={resolvedPercent}
+        onResolvedClick={onResolvedClick}
+      />
+    );
+  }
+
+  return (
+    <TotalCard stats={stats} />
   );
 };
 

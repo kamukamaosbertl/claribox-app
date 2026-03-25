@@ -1,161 +1,230 @@
 import { TrendingUp, TrendingDown, Minus, BarChart3 } from 'lucide-react';
 
+const font = "'Plus Jakarta Sans', 'DM Sans', sans-serif";
+
 const RANK_LABELS = ['🥇', '🥈', '🥉'];
 
-// ── Category colors for dot indicators ───────────────────────────────────────
 const CATEGORY_COLORS = {
-  academic:   'bg-indigo-500',
-  library:    'bg-green-500',
-  it:         'bg-cyan-500',
-  facilities: 'bg-orange-500',
-  canteen:    'bg-yellow-500',
-  transport:  'bg-purple-500',
-  hostel:     'bg-rose-500',
-  admin:      'bg-slate-400',
-  other:      'bg-slate-400',
+  academic:   '#6366F1',
+  library:    '#22C55E',
+  it:         '#06B6D4',
+  facilities: '#F59E0B',
+  canteen:    '#EAB308',
+  transport:  '#8B5CF6',
+  hostel:     '#F43F5E',
+  admin:      '#64748B',
+  other:      '#94A3B8',
 };
 
-// ── TrendingIssues component ──────────────────────────────────────────────────
-// Shows top categories by feedback count
-// trend = 'up'     → more feedback this week than last → problem getting worse
-// trend = 'down'   → less feedback this week → problem improving (resolution working!)
-// trend = 'stable' → same as last week
-// change           → exact number difference e.g. +3 or -2
 const TrendingIssues = ({ trends }) => {
-  const max = trends && trends.length > 0
-    ? Math.max(...trends.map(t => t.count || 0))
-    : 1;
+  const max = trends?.length > 0 ? Math.max(...trends.map((t) => t.count || 0)) : 1;
 
   return (
-    <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden flex flex-col h-full">
+    <div style={{
+      display: 'flex', flexDirection: 'column',
+      height: '100%', overflow: 'hidden', fontFamily: font,
+    }}>
 
-      {/* ── Header ── */}
-      <div className="relative overflow-hidden bg-gradient-to-r from-indigo-600 to-indigo-500 px-5 py-4 flex items-center justify-between">
-        <div className="absolute -top-4 -right-4 w-20 h-20 rounded-full bg-white/10 pointer-events-none" />
-        <div className="relative flex items-center gap-3">
-          <div className="w-8 h-8 rounded-xl bg-white/20 flex items-center justify-center">
-            <TrendingUp className="w-4 h-4 text-white" />
+      {/* ── Header ──────────────────────────────────────────────── */}
+      <div style={{
+        position: 'relative', overflow: 'hidden',
+        background: 'linear-gradient(135deg, #1E3A8A 0%, #2563EB 55%, #1D4ED8 100%)',
+        padding: '16px 20px', flexShrink: 0,
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+      }}>
+        <div style={{
+          position: 'absolute', top: '-16px', right: '-16px',
+          width: '80px', height: '80px', borderRadius: '50%',
+          background: 'rgba(255,255,255,0.07)', pointerEvents: 'none',
+        }} />
+
+        <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div style={{
+            width: '34px', height: '34px', borderRadius: '10px',
+            background: 'rgba(255,255,255,0.14)',
+            border: '1px solid rgba(255,255,255,0.2)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <TrendingUp size={16} color="#FFFFFF" />
           </div>
           <div>
-            <h2 className="text-sm font-bold text-white leading-none mb-0.5">Trending Issues</h2>
-            {/* Subtitle explains what the trend arrows mean */}
-            <p className="text-xs text-white/65">↑ rising · ↓ improving this week</p>
+            <h2 style={{ fontSize: '13px', fontWeight: 700, color: '#FFFFFF', margin: '0 0 2px', letterSpacing: '-0.01em' }}>
+              Trending Issues
+            </h2>
+            <p style={{ fontSize: '11px', color: 'rgba(255,255,255,0.55)', margin: 0, fontWeight: 500 }}>
+              ↑ rising · ↓ improving this week
+            </p>
           </div>
         </div>
-        {trends && trends.length > 0 && (
-          <span className="relative text-xs font-bold text-white bg-white/20 px-3 py-1 rounded-full">
+
+        {trends?.length > 0 && (
+          <span style={{
+            position: 'relative',
+            fontSize: '11px', fontWeight: 700, color: '#FFFFFF',
+            background: 'rgba(255,255,255,0.14)',
+            border: '1px solid rgba(255,255,255,0.18)',
+            borderRadius: '20px', padding: '4px 10px',
+          }}>
             {trends.length} issues
           </span>
         )}
       </div>
 
-      {/* ── Content ── */}
-      {trends && trends.length > 0 ? (
-        <div className="p-4 flex flex-col gap-2.5 flex-1 overflow-y-auto">
+      {/* ── Content ─────────────────────────────────────────────── */}
+      {trends?.length > 0 ? (
+        <div style={{ flex: 1, overflowY: 'auto', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
           {trends.map((trend, index) => {
-            // How wide the progress bar should be relative to the top item
             const pct       = max > 0 ? Math.round((trend.count / max) * 100) : 0;
             const isRising  = trend.trend === 'up';
             const isFalling = trend.trend === 'down';
             const isTop     = index === 0;
-            const catColor  = CATEGORY_COLORS[trend.title?.toLowerCase()] || 'bg-slate-400';
+            const catColor  = CATEGORY_COLORS[trend.title?.toLowerCase()] || CATEGORY_COLORS.other;
 
-            // Format change number e.g. +3, -2, 0
             const changeLabel = trend.change > 0
               ? `+${trend.change} this week`
               : trend.change < 0
                 ? `${trend.change} this week`
                 : 'same as last week';
 
+            // Card background logic
+            const cardBg     = isTop     ? '#FFFBEB'
+                             : isFalling ? '#F0FDF4'
+                             :             '#FAFBFC';
+            const cardBorder = isTop     ? '#FDE68A'
+                             : isFalling ? '#BBF7D0'
+                             :             '#E2E8F0';
+
+            // Trend badge
+            const trendBg    = isRising  ? 'rgba(239,68,68,0.08)'
+                             : isFalling ? 'rgba(34,197,94,0.08)'
+                             :             'rgba(100,116,139,0.08)';
+            const trendBorder= isRising  ? 'rgba(239,68,68,0.25)'
+                             : isFalling ? 'rgba(34,197,94,0.25)'
+                             :             'rgba(100,116,139,0.2)';
+            const trendColor = isRising  ? '#B91C1C'
+                             : isFalling ? '#15803D'
+                             :             '#64748B';
+
+            // Bar color
+            const barColor   = isTop     ? '#F59E0B'
+                             : isFalling ? '#22C55E'
+                             :             catColor;
+
             return (
               <div
                 key={index}
-                className={`group px-4 py-3.5 rounded-xl border transition-all duration-200 cursor-pointer hover:shadow-sm
-                  ${isTop
-                    ? 'bg-amber-50 border-amber-200 hover:bg-amber-100'
-                    : isFalling
-                      // Green tint when falling — resolution is working!
-                      ? 'bg-green-50/50 border-green-100 hover:bg-green-50'
-                      : 'bg-slate-50 border-slate-100 hover:bg-indigo-50 hover:border-indigo-200'
-                  }`}
+                style={{
+                  background: cardBg,
+                  border: `1px solid ${cardBorder}`,
+                  borderRadius: '14px',
+                  padding: '12px 14px',
+                  transition: 'all 0.18s ease',
+                  cursor: 'pointer',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = 'translateY(-1px)';
+                  e.currentTarget.style.boxShadow = '0 4px 12px rgba(15,23,42,0.08)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = 'none';
+                }}
               >
-                {/* ── Top row: rank + title + trend badge ── */}
-                <div className="flex items-center justify-between mb-2.5">
-                  <div className="flex items-center gap-2">
-                    {/* Rank medal or number */}
-                    <span className={`font-extrabold min-w-5 text-center
-                      ${index < 3 ? 'text-base' : 'text-xs text-indigo-500'}`}>
+                {/* Top row */}
+                <div style={{
+                  display: 'flex', alignItems: 'center',
+                  justifyContent: 'space-between', marginBottom: '10px',
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    {/* Rank */}
+                    <span style={{
+                      fontSize: index < 3 ? '15px' : '11px',
+                      fontWeight: 800,
+                      color: index < 3 ? 'inherit' : '#6366F1',
+                      minWidth: '20px', textAlign: 'center',
+                      lineHeight: 1,
+                    }}>
                       {RANK_LABELS[index] || `#${index + 1}`}
                     </span>
 
-                    {/* Category color dot */}
-                    <div className={`w-2 h-2 rounded-full ${catColor} flex-shrink-0`} />
+                    {/* Category dot */}
+                    <span style={{
+                      width: '7px', height: '7px', borderRadius: '50%',
+                      background: catColor, flexShrink: 0,
+                      boxShadow: `0 0 0 2px ${catColor}28`,
+                    }} />
 
                     {/* Category name */}
-                    <p className="text-sm font-bold text-slate-800 capitalize">{trend.title}</p>
+                    <p style={{
+                      fontSize: '13px', fontWeight: 700,
+                      color: '#0F172A', margin: 0,
+                      textTransform: 'capitalize', letterSpacing: '-0.01em',
+                    }}>
+                      {trend.title}
+                    </p>
                   </div>
 
-                  {/* ── Trend badge ── */}
-                  {/* Shows rising/falling/stable with color coding */}
-                  <div className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold border
-                    ${isRising
-                      ? 'bg-red-50 text-red-700 border-red-200'      // red = getting worse
-                      : isFalling
-                        ? 'bg-green-50 text-green-700 border-green-200' // green = improving
-                        : 'bg-slate-100 text-slate-500 border-slate-200' // grey = stable
-                    }`}>
-                    {isRising  && <TrendingUp   className="w-3 h-3" />}
-                    {isFalling && <TrendingDown className="w-3 h-3" />}
-                    {!isRising && !isFalling && <Minus className="w-3 h-3" />}
-                    <span>
-                      {isRising ? 'Rising' : isFalling ? 'Improving' : 'Stable'}
-                    </span>
+                  {/* Trend badge */}
+                  <div style={{
+                    display: 'inline-flex', alignItems: 'center', gap: '4px',
+                    background: trendBg, border: `1px solid ${trendBorder}`,
+                    borderRadius: '20px', padding: '3px 9px',
+                    fontSize: '10.5px', fontWeight: 700, color: trendColor,
+                  }}>
+                    {isRising  && <TrendingUp  size={11} color={trendColor} />}
+                    {isFalling && <TrendingDown size={11} color={trendColor} />}
+                    {!isRising && !isFalling && <Minus size={11} color={trendColor} />}
+                    {isRising ? 'Rising' : isFalling ? 'Improving' : 'Stable'}
                   </div>
                 </div>
 
-                {/* ── Progress bar + count ── */}
-                <div className="flex items-center gap-3 mb-1.5">
-                  <div className="flex-1 h-1.5 bg-slate-200 rounded-full overflow-hidden">
-                    <div
-                      className={`h-full rounded-full transition-all duration-700
-                        ${isTop
-                          ? 'bg-gradient-to-r from-amber-400 to-yellow-300'
-                          : isFalling
-                            ? 'bg-gradient-to-r from-green-500 to-emerald-400'
-                            : 'bg-gradient-to-r from-indigo-500 to-indigo-400'
-                        }`}
-                      style={{ width: `${pct}%` }}
-                    />
+                {/* Progress bar + count */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '7px' }}>
+                  <div style={{
+                    flex: 1, height: '5px', borderRadius: '99px',
+                    background: '#E2E8F0', overflow: 'hidden',
+                  }}>
+                    <div style={{
+                      height: '100%', width: `${pct}%`,
+                      borderRadius: '99px', background: barColor,
+                      boxShadow: `0 0 5px ${barColor}55`,
+                      transition: 'width 0.7s cubic-bezier(0.4,0,0.2,1)',
+                    }} />
                   </div>
-                  <span className="text-xs font-semibold text-slate-500 min-w-fit">
+                  <span style={{
+                    fontSize: '11px', fontWeight: 600, color: '#64748B',
+                    whiteSpace: 'nowrap', minWidth: 'fit-content',
+                  }}>
                     {trend.count} total
                   </span>
                 </div>
 
-                {/* ── This week vs last week ── */}
-                {/* Shows the actual change number so admin knows exactly how much */}
-                <div className="flex items-center justify-between">
-                  <span className={`text-xs font-medium
-                    ${isRising  ? 'text-red-500'
-                    : isFalling ? 'text-green-600'
-                    :             'text-slate-400'}`}>
+                {/* Change label + week comparison */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span style={{
+                    fontSize: '11px', fontWeight: 600,
+                    color: isRising ? '#EF4444' : isFalling ? '#16A34A' : '#94A3B8',
+                  }}>
                     {changeLabel}
                   </span>
-
-                  {/* Show this week / last week counts if available */}
                   {(trend.thisWeek !== undefined || trend.lastWeek !== undefined) && (
-                    <span className="text-xs text-slate-400">
+                    <span style={{ fontSize: '10.5px', color: '#CBD5E1', fontWeight: 500 }}>
                       {trend.thisWeek ?? 0} this wk · {trend.lastWeek ?? 0} last wk
                     </span>
                   )}
                 </div>
 
-                {/* ── Resolution impact note ── */}
-                {/* Shows a green note when category is improving */}
+                {/* Resolution impact note */}
                 {isFalling && (
-                  <div className="mt-2 flex items-center gap-1.5 px-2.5 py-1.5 bg-green-100 rounded-lg">
-                    <span className="text-xs">✅</span>
-                    <span className="text-xs text-green-700 font-semibold">
+                  <div style={{
+                    marginTop: '9px',
+                    display: 'flex', alignItems: 'center', gap: '6px',
+                    background: 'rgba(34,197,94,0.10)',
+                    border: '1px solid rgba(34,197,94,0.2)',
+                    borderRadius: '8px', padding: '6px 10px',
+                  }}>
+                    <span style={{ fontSize: '12px' }}>✅</span>
+                    <span style={{ fontSize: '11px', fontWeight: 600, color: '#15803D' }}>
                       Feedback reducing — resolution may be working
                     </span>
                   </div>
@@ -165,13 +234,26 @@ const TrendingIssues = ({ trends }) => {
           })}
         </div>
       ) : (
-        /* ── Empty state ── */
-        <div className="flex-1 flex flex-col items-center justify-center py-12 gap-3 bg-slate-50/50">
-          <div className="w-12 h-12 rounded-full bg-indigo-50 flex items-center justify-center">
-            <BarChart3 className="w-6 h-6 text-indigo-500" />
+        /* Empty state */
+        <div style={{
+          flex: 1, display: 'flex', flexDirection: 'column',
+          alignItems: 'center', justifyContent: 'center',
+          gap: '12px', padding: '40px 24px', textAlign: 'center',
+          background: '#FAFBFC',
+        }}>
+          <div style={{
+            width: '48px', height: '48px', borderRadius: '14px',
+            background: 'linear-gradient(135deg, #EFF6FF 0%, #DBEAFE 100%)',
+            border: '1px solid #BFDBFE',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            boxShadow: '0 4px 12px rgba(37,99,235,0.10)',
+          }}>
+            <BarChart3 size={22} color="#2563EB" />
           </div>
-          <p className="text-sm font-semibold text-slate-700">No trending issues</p>
-          <p className="text-xs text-slate-400 text-center max-w-xs">
+          <p style={{ fontSize: '13px', fontWeight: 700, color: '#334155', margin: 0 }}>
+            No trending issues
+          </p>
+          <p style={{ fontSize: '12px', color: '#94A3B8', margin: 0, maxWidth: '200px', lineHeight: '1.5' }}>
             Issues will appear here as feedback grows.
           </p>
         </div>

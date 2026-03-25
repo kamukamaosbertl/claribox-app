@@ -2,12 +2,29 @@ import { useState } from 'react';
 import { X, CheckCircle, Send } from 'lucide-react';
 import { adminAPI } from '../../services/api';
 
+const font = "'Plus Jakarta Sans', 'DM Sans', sans-serif";
+
 const CATEGORIES = [
   'General', 'Infrastructure', 'Academics',
-  'Services', 'Facilities', 'Technology', 'Other'
+  'Services', 'Facilities', 'Technology', 'Other',
 ];
 
 const EMPTY_FORM = { title: '', description: '', category: 'General' };
+
+const inputBase = {
+  width: '100%', boxSizing: 'border-box',
+  padding: '10px 14px',
+  borderRadius: '12px',
+  fontSize: '13px', color: '#0F172A', fontFamily: font,
+  outline: 'none',
+  transition: 'border-color 0.15s ease, box-shadow 0.15s ease',
+};
+
+const labelStyle = {
+  display: 'block', fontSize: '11px', fontWeight: 700,
+  color: '#475569', marginBottom: '6px',
+  textTransform: 'uppercase', letterSpacing: '0.06em', fontFamily: font,
+};
 
 const ResolutionModal = ({ isOpen, onClose, onSuccess }) => {
   if (!isOpen) return null;
@@ -45,149 +62,235 @@ const ResolutionModal = ({ isOpen, onClose, onSuccess }) => {
   };
 
   const isFormEmpty = !formData.title.trim() && !formData.description.trim();
+  const isDisabled  = loading || isFormEmpty;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 50,
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      fontFamily: font,
+    }}>
       {/* Backdrop */}
       <div
         onClick={onClose}
-        className="absolute inset-0 bg-slate-900/55 backdrop-blur-sm"
+        style={{
+          position: 'absolute', inset: 0,
+          background: 'rgba(15,23,42,0.50)',
+          backdropFilter: 'blur(4px)',
+        }}
       />
 
-      {/* Modal */}
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto animate-modal">
+      {/* Modal card */}
+      <div style={{
+        position: 'relative',
+        width: '100%', maxWidth: '480px',
+        margin: '0 16px',
+        background: '#FFFFFF',
+        borderRadius: '22px',
+        boxShadow: '0 24px 64px rgba(15,23,42,0.18)',
+        overflow: 'hidden',
+        animation: 'modalIn 0.2s ease',
+        maxHeight: '92vh', overflowY: 'auto',
+      }}>
 
-        {/* Header */}
-        <div className="relative overflow-hidden bg-gradient-to-r from-emerald-600 to-emerald-500 rounded-t-2xl px-6 py-5 flex items-center justify-between">
-          {/* Decorative circle */}
-          <div className="absolute -top-5 -right-5 w-24 h-24 rounded-full bg-white/10 pointer-events-none" />
+        {/* ── Header ────────────────────────────────────────── */}
+        <div style={{
+          position: 'relative', overflow: 'hidden',
+          background: 'linear-gradient(135deg, #064E3B 0%, #059669 55%, #047857 100%)',
+          padding: '20px 22px',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        }}>
+          {/* Blob */}
+          <div style={{
+            position: 'absolute', top: '-20px', right: '-20px',
+            width: '90px', height: '90px', borderRadius: '50%',
+            background: 'rgba(255,255,255,0.08)', pointerEvents: 'none',
+          }} />
+          {/* Grid */}
+          <div style={{
+            position: 'absolute', inset: 0, pointerEvents: 'none',
+            backgroundImage: 'linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px)',
+            backgroundSize: '28px 28px',
+          }} />
 
-          <div className="relative flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center">
-              <CheckCircle className="w-5 h-5 text-white" />
+          <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div style={{
+              width: '40px', height: '40px', borderRadius: '11px',
+              background: 'rgba(255,255,255,0.15)',
+              border: '1px solid rgba(255,255,255,0.2)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.12)',
+            }}>
+              <CheckCircle size={19} color="#FFFFFF" />
             </div>
             <div>
-              <h2 className="text-sm font-bold text-white leading-none mb-0.5">Add Resolution</h2>
-              <p className="text-xs text-white/70">Document how you resolved the issue</p>
+              <h2 style={{ fontSize: '14px', fontWeight: 800, color: '#FFFFFF', margin: '0 0 2px', letterSpacing: '-0.02em' }}>
+                Add Resolution
+              </h2>
+              <p style={{ fontSize: '11px', color: 'rgba(255,255,255,0.60)', margin: 0, fontWeight: 500 }}>
+                Document how you resolved the issue
+              </p>
             </div>
           </div>
 
           <button
             onClick={onClose}
-            className="relative w-8 h-8 rounded-xl bg-white/20 hover:bg-white/30 text-white flex items-center justify-center transition-colors border-none cursor-pointer"
+            style={{
+              position: 'relative',
+              width: '32px', height: '32px', borderRadius: '9px',
+              background: 'rgba(255,255,255,0.14)',
+              border: '1px solid rgba(255,255,255,0.2)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              cursor: 'pointer', color: '#FFFFFF',
+              transition: 'background 0.15s ease',
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.22)'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.14)'; }}
           >
-            <X className="w-4 h-4" />
+            <X size={15} />
           </button>
         </div>
 
-        {/* Form */}
-        <form onSubmit={handleSubmit} className="p-6 flex flex-col gap-4">
+        {/* ── Form ──────────────────────────────────────────── */}
+        <form onSubmit={handleSubmit} style={{ padding: '22px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
 
           {/* Title */}
           <div>
-            <label className="block text-xs font-semibold text-gray-600 mb-1.5">
-              Resolution Title
-            </label>
+            <label style={labelStyle}>Resolution Title</label>
             <input
               type="text"
               value={formData.title}
-              onChange={e => setFormData({ ...formData, title: e.target.value })}
+              onChange={(e) => setFormData({ ...formData, title: e.target.value })}
               placeholder="e.g., Fixed WiFi issues in Library"
-              className={`w-full px-4 py-2.5 rounded-xl border text-sm outline-none transition-colors focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400
-                ${errors.title
-                  ? 'border-red-300 bg-red-50'
-                  : 'border-slate-200 bg-white'
-                }`}
+              style={{
+                ...inputBase,
+                border: `1px solid ${errors.title ? '#FECACA' : '#E2E8F0'}`,
+                background: errors.title ? '#FEF2F2' : '#FFFFFF',
+              }}
+              onFocus={(e) => { if (!errors.title) { e.target.style.borderColor = '#93C5FD'; e.target.style.boxShadow = '0 0 0 3px rgba(37,99,235,0.08)'; } }}
+              onBlur={(e)  => { e.target.style.borderColor = errors.title ? '#FECACA' : '#E2E8F0'; e.target.style.boxShadow = 'none'; }}
             />
-            {errors.title && (
-              <p className="text-xs text-red-500 mt-1">{errors.title}</p>
-            )}
-            <p className="text-xs text-gray-400 mt-1 text-right">{formData.title.length}/100</p>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '5px' }}>
+              {errors.title
+                ? <span style={{ fontSize: '11px', color: '#EF4444', fontWeight: 600 }}>{errors.title}</span>
+                : <span />
+              }
+              <span style={{ fontSize: '11px', color: '#CBD5E1', marginLeft: 'auto' }}>
+                {formData.title.length}/100
+              </span>
+            </div>
           </div>
 
           {/* Description */}
           <div>
-            <label className="block text-xs font-semibold text-gray-600 mb-1.5">
-              Description
-            </label>
+            <label style={labelStyle}>Description</label>
             <textarea
               value={formData.description}
-              onChange={e => setFormData({ ...formData, description: e.target.value })}
+              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
               placeholder="Describe what was done to resolve this issue..."
               rows={4}
-              className={`w-full px-4 py-2.5 rounded-xl border text-sm outline-none transition-colors resize-none focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400
-                ${errors.description
-                  ? 'border-red-300 bg-red-50'
-                  : 'border-slate-200 bg-white'
-                }`}
+              style={{
+                ...inputBase,
+                border: `1px solid ${errors.description ? '#FECACA' : '#E2E8F0'}`,
+                background: errors.description ? '#FEF2F2' : '#FFFFFF',
+                resize: 'none', lineHeight: '1.55',
+              }}
+              onFocus={(e) => { if (!errors.description) { e.target.style.borderColor = '#93C5FD'; e.target.style.boxShadow = '0 0 0 3px rgba(37,99,235,0.08)'; } }}
+              onBlur={(e)  => { e.target.style.borderColor = errors.description ? '#FECACA' : '#E2E8F0'; e.target.style.boxShadow = 'none'; }}
             />
-            {errors.description && (
-              <p className="text-xs text-red-500 mt-1">{errors.description}</p>
-            )}
-            <p className="text-xs text-gray-400 mt-1 text-right">{formData.description.length}/500</p>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '5px' }}>
+              {errors.description
+                ? <span style={{ fontSize: '11px', color: '#EF4444', fontWeight: 600 }}>{errors.description}</span>
+                : <span />
+              }
+              <span style={{ fontSize: '11px', color: '#CBD5E1', marginLeft: 'auto' }}>
+                {formData.description.length}/500
+              </span>
+            </div>
           </div>
 
           {/* Category */}
           <div>
-            <label className="block text-xs font-semibold text-gray-600 mb-1.5">
-              Category
-            </label>
+            <label style={labelStyle}>Category</label>
             <select
               value={formData.category}
-              onChange={e => setFormData({ ...formData, category: e.target.value })}
-              className="w-full px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-sm outline-none focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 transition-colors"
+              onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+              style={{ ...inputBase, border: '1px solid #E2E8F0', background: '#FFFFFF' }}
+              onFocus={(e) => { e.target.style.borderColor = '#93C5FD'; e.target.style.boxShadow = '0 0 0 3px rgba(37,99,235,0.08)'; }}
+              onBlur={(e)  => { e.target.style.borderColor = '#E2E8F0'; e.target.style.boxShadow = 'none'; }}
             >
-              {CATEGORIES.map(cat => (
+              {CATEGORIES.map((cat) => (
                 <option key={cat} value={cat}>{cat}</option>
               ))}
             </select>
           </div>
 
           {/* Divider */}
-          <hr className="border-slate-100" />
+          <div style={{ height: '1px', background: '#F1F5F9' }} />
 
-          {/* Buttons */}
-          <div className="flex gap-3">
+          {/* Action buttons */}
+          <div style={{ display: 'flex', gap: '10px' }}>
             <button
               type="submit"
-              disabled={loading || isFormEmpty}
-              className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold text-white transition-all
-                ${loading || isFormEmpty
-                  ? 'bg-indigo-300 cursor-not-allowed'
-                  : 'bg-gradient-to-r from-indigo-600 to-indigo-500 hover:shadow-lg hover:shadow-indigo-200 hover:-translate-y-0.5 cursor-pointer'
-                }`}
+              disabled={isDisabled}
+              style={{
+                flex: 1,
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '7px',
+                padding: '11px',
+                borderRadius: '12px', border: 'none',
+                background: isDisabled
+                  ? '#93C5FD'
+                  : 'linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%)',
+                color: '#FFFFFF', fontSize: '13px', fontWeight: 800,
+                cursor: isDisabled ? 'not-allowed' : 'pointer', fontFamily: font,
+                boxShadow: isDisabled ? 'none' : '0 4px 14px rgba(37,99,235,0.24)',
+                letterSpacing: '-0.01em',
+                transition: 'all 0.16s ease',
+              }}
+              onMouseEnter={(e) => { if (!isDisabled) { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 8px 20px rgba(37,99,235,0.30)'; } }}
+              onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = isDisabled ? 'none' : '0 4px 14px rgba(37,99,235,0.24)'; }}
             >
               {loading ? (
                 <>
-                  <div className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
-                  Saving...
+                  <div style={{
+                    width: '13px', height: '13px', borderRadius: '50%',
+                    border: '2px solid rgba(255,255,255,0.35)',
+                    borderTopColor: '#FFFFFF',
+                    animation: 'spin 0.8s linear infinite',
+                  }} />
+                  Saving…
                 </>
               ) : (
-                <><Send className="w-3.5 h-3.5" /> Publish Resolution</>
+                <><Send size={13} /> Publish Resolution</>
               )}
             </button>
 
             <button
-              type="button"
-              onClick={onClose}
-              className="px-5 py-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-gray-600 text-sm font-semibold transition-colors cursor-pointer"
+              type="button" onClick={onClose}
+              style={{
+                padding: '11px 20px',
+                borderRadius: '12px',
+                border: '1px solid #E2E8F0',
+                background: '#FFFFFF', color: '#475569',
+                fontSize: '13px', fontWeight: 600,
+                cursor: 'pointer', fontFamily: font,
+                transition: 'all 0.15s ease',
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = '#F8FAFC'; e.currentTarget.style.borderColor = '#CBD5E1'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = '#FFFFFF'; e.currentTarget.style.borderColor = '#E2E8F0'; }}
             >
               Cancel
             </button>
           </div>
-
         </form>
       </div>
 
       <style>{`
-        .animate-modal {
-          animation: modalIn 0.2s ease;
-        }
         @keyframes modalIn {
-          from { opacity: 0; transform: scale(0.95) translateY(10px); }
-          to   { opacity: 1; transform: scale(1) translateY(0); }
+          from { opacity: 0; transform: scale(0.96) translateY(12px); }
+          to   { opacity: 1; transform: scale(1)    translateY(0);    }
         }
+        @keyframes spin { to { transform: rotate(360deg); } }
       `}</style>
     </div>
   );

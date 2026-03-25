@@ -1,112 +1,104 @@
 import { BrowserRouter, Routes, Route, Navigate, useLocation, Outlet } from 'react-router-dom';
+import TopProgressBar from './components/TopProgressBar';
 
 // Student Pages
-import Navbar from './components/common/Navbar';
-import Footer from './components/common/Footer';
-import Home from './pages/student/Home';
-import SubmitFeedback from './pages/student/SubmitFeedback';
+import Navbar           from './components/common/Navbar';
+import Footer           from './components/common/Footer';
+import Home             from './pages/student/Home';
+import SubmitFeedback   from './pages/student/SubmitFeedback';
 
 // Admin Pages
-import AdminLayout from './components/admin/AdminLayout';
-import Login from './pages/admin/Login';
-import Dashboard from './components/dashboard/Dashboard';
+import AdminLayout      from './components/admin/AdminLayout';
+import Login            from './pages/admin/Login';
+import Dashboard        from './components/dashboard/Dashboard';
 import CategoryInsights from './pages/admin/CategoryInsights';
-import Reports from './pages/admin/Reports';
-import Settings from './pages/admin/Settings';
-import ChatWithAI from './pages/admin/ChatWithAI';
-import AllFeedback from './pages/admin/AllFeedback';
+import Reports          from './pages/admin/Reports';
+import Settings         from './pages/admin/Settings';
+import ChatWithAI       from './pages/admin/ChatWithAI';
+import AllFeedback      from './pages/admin/AllFeedback';
 
-// ─── Token Validator ──────────────────────────────────────────────────────────
+// ── Token validator ───────────────────────────────────────────────────────
 // Checks token exists AND is not expired by decoding the JWT payload
 const getValidToken = () => {
   const token = localStorage.getItem('adminToken');
   if (!token) return null;
-
   try {
     const { exp } = JSON.parse(atob(token.split('.')[1]));
     if (Date.now() >= exp * 1000) {
-      // Token expired — clean up and return null
       localStorage.removeItem('adminToken');
       localStorage.removeItem('adminUser');
       return null;
     }
     return token;
   } catch {
-    // Malformed token — clean up
     localStorage.removeItem('adminToken');
     localStorage.removeItem('adminUser');
     return null;
   }
 };
 
-// ─── Protected Route ──────────────────────────────────────────────────────────
+// ── Protected route ───────────────────────────────────────────────────────
 // Blocks access if token is missing or expired
 // Saves attempted URL so admin is redirected back after login
 const ProtectedRoute = ({ children }) => {
   const token    = getValidToken();
   const location = useLocation();
-
-  if (!token) {
-    return <Navigate to="/admin/login" state={{ from: location }} replace />;
-  }
-
+  if (!token) return <Navigate to="/admin/login" state={{ from: location }} replace />;
   return children;
 };
 
-// ─── Public Route ─────────────────────────────────────────────────────────────
+// ── Public route ──────────────────────────────────────────────────────────
 // Redirects logged-in admin away from login page to dashboard
 const PublicRoute = ({ children }) => {
   const token = getValidToken();
-  if (token) {
-    return <Navigate to="/admin/dashboard" replace />;
-  }
+  if (token) return <Navigate to="/admin/dashboard" replace />;
   return children;
 };
 
-// ─── Student Layout ───────────────────────────────────────────────────────────
-// Uses nested layout pattern — consistent with AdminLayout approach
+// ── Student layout ────────────────────────────────────────────────────────
 const StudentLayout = () => (
-  <div className="flex flex-col min-h-screen">
+  <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
     <Navbar />
-    <main className="flex-1">
+    <main style={{ flex: 1 }}>
       <Outlet />
     </main>
     <Footer />
   </div>
 );
 
-// ─── App ──────────────────────────────────────────────────────────────────────
+// ── App ───────────────────────────────────────────────────────────────────
 function App() {
   return (
     <BrowserRouter>
+    <TopProgressBar />
       <Routes>
 
-        {/* ── Student Routes — nested layout pattern ── */}
+        {/* ── Student routes ── */}
         <Route element={<StudentLayout />}>
           <Route path="/"       element={<Home />} />
           <Route path="/submit" element={<SubmitFeedback />} />
         </Route>
 
-        {/* ── Admin Login — redirect to dashboard if already logged in ── */}
+        {/* ── Admin login — redirect to dashboard if already logged in ── */}
         <Route path="/admin/login" element={
           <PublicRoute>
             <Login />
           </PublicRoute>
         } />
 
-        {/* ── Admin Routes — all protected with valid token check ── */}
+        {/* ── Admin routes — all protected with valid token check ── */}
         <Route path="/admin" element={
           <ProtectedRoute>
             <AdminLayout />
           </ProtectedRoute>
         }>
-          <Route index          element={<Navigate to="dashboard" replace />} />
-          <Route path="dashboard" element={<Dashboard />} />
-          <Route path="chat"      element={<ChatWithAI />} />
-          <Route path="insights"  element={<CategoryInsights />} />
-          <Route path="reports"   element={<Reports />} />
-          <Route path="feedback"  element={<AllFeedback />} /> 
-          <Route path="settings"  element={<Settings />} />
+          <Route index             element={<Navigate to="dashboard" replace />} />
+          <Route path="dashboard"  element={<Dashboard />} />
+          <Route path="chat"       element={<ChatWithAI />} />
+          <Route path="insights"   element={<CategoryInsights />} />
+          <Route path="reports"    element={<Reports />} />
+          <Route path="feedback"   element={<AllFeedback />} />
+          <Route path="settings"   element={<Settings />} />
         </Route>
 
         {/* ── Catch all unknown URLs ── */}

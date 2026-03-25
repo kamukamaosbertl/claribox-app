@@ -3,59 +3,57 @@ import {
   FileText, RefreshCw, AlertCircle,
   TrendingUp, MessageSquare, CheckCircle,
   Calendar, FileDown, Printer,
-  ChevronLeft, ChevronRight
+  ChevronLeft, ChevronRight,
 } from 'lucide-react';
 import { adminAPI } from '../../services/api';
 
-// ── Category colors ───────────────────────────────────────────────────────────
+const font = "'Plus Jakarta Sans', 'DM Sans', sans-serif";
+
+// ── Palette ───────────────────────────────────────────────────────────────
 const CATEGORY_COLORS = {
-  academic:   'bg-indigo-500',
-  library:    'bg-green-500',
-  it:         'bg-cyan-500',
-  facilities: 'bg-orange-500',
-  canteen:    'bg-yellow-500',
-  transport:  'bg-purple-500',
-  hostel:     'bg-rose-500',
-  admin:      'bg-slate-400',
-  other:      'bg-slate-400',
+  academic:   '#6366F1',
+  library:    '#22C55E',
+  it:         '#06B6D4',
+  facilities: '#F59E0B',
+  canteen:    '#EAB308',
+  transport:  '#8B5CF6',
+  hostel:     '#F43F5E',
+  admin:      '#64748B',
+  other:      '#94A3B8',
 };
 
-// ── Date filter options ───────────────────────────────────────────────────────
+const STATUS_STYLES = {
+  'Completed':   { bg: 'rgba(34,197,94,0.08)',  border: 'rgba(34,197,94,0.25)',  text: '#15803D' },
+  'In Progress': { bg: 'rgba(245,158,11,0.08)', border: 'rgba(245,158,11,0.25)', text: '#B45309' },
+  'Planned':     { bg: 'rgba(37,99,235,0.08)',  border: 'rgba(37,99,235,0.25)',  text: '#1D4ED8' },
+};
+
 const DATE_FILTERS = [
-  { label: 'All Time',     value: 'all'      },
-  { label: 'Last 7 days',  value: '7days'    },
-  { label: 'Last 30 days', value: '30days'   },
-  { label: 'This Semester',value: 'semester' },
+  { label: 'All Time',      value: 'all'      },
+  { label: 'Last 7 days',   value: '7days'    },
+  { label: 'Last 30 days',  value: '30days'   },
+  { label: 'This Semester', value: 'semester' },
 ];
 
-// How many resolutions to show per page
 const RES_PER_PAGE = 5;
 
-// ── Export to CSV ─────────────────────────────────────────────────────────────
-// Always exports ALL resolutions — not just the current page
-// This ensures the full report is included even with pagination active
+// ── CSV export ────────────────────────────────────────────────────────────
 const exportToCSV = (stats, categoryData, resolutions, filter) => {
-  const rows = [];
-  const date = new Date().toLocaleDateString();
+  const rows   = [];
+  const date   = new Date().toLocaleDateString();
   const period = DATE_FILTERS.find(f => f.value === filter)?.label || 'All Time';
-
-  // Section 1 — Report header
   rows.push(['CLARIBOX FEEDBACK REPORT']);
   rows.push([`Generated: ${date}`]);
   rows.push([`Period: ${period}`]);
   rows.push([]);
-
-  // Section 2 — Summary stats
   rows.push(['SUMMARY']);
   rows.push(['Metric', 'Value']);
-  rows.push(['Total Feedback',  stats.total    || 0]);
-  rows.push(['Positive',        stats.positive || 0]);
-  rows.push(['Neutral',         stats.neutral  || 0]);
-  rows.push(['Negative',        stats.negative || 0]);
-  rows.push(['Total Resolutions', resolutions.length]);
+  rows.push(['Total Feedback',     stats.total    || 0]);
+  rows.push(['Positive',           stats.positive || 0]);
+  rows.push(['Neutral',            stats.neutral  || 0]);
+  rows.push(['Negative',           stats.negative || 0]);
+  rows.push(['Total Resolutions',  resolutions.length]);
   rows.push([]);
-
-  // Section 3 — Category breakdown
   rows.push(['FEEDBACK BY CATEGORY']);
   rows.push(['Category', 'Count', 'Percentage']);
   categoryData.forEach(cat => {
@@ -63,291 +61,331 @@ const exportToCSV = (stats, categoryData, resolutions, filter) => {
     rows.push([cat.name, cat.count, `${pct}%`]);
   });
   rows.push([]);
-
-  // Section 4 — ALL resolved issues (not just current page)
   rows.push(['RESOLVED ISSUES']);
   rows.push(['Title', 'Description', 'Category', 'Status', 'Date Resolved']);
   resolutions.forEach(res => {
-    rows.push([
-      res.title,
-      res.description || '',
-      res.category,
-      res.status || 'Completed',
-      new Date(res.createdAt).toLocaleDateString()
-    ]);
+    rows.push([res.title, res.description || '', res.category, res.status || 'Completed', new Date(res.createdAt).toLocaleDateString()]);
   });
-
-  // Convert to CSV and trigger download
-  const csv     = rows.map(r => r.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(',')).join('\n');
-  const blob    = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-  const url     = URL.createObjectURL(blob);
-  const link    = document.createElement('a');
-  link.href     = url;
-  link.download = `claribox-report-${date.replace(/\//g, '-')}.csv`;
-  link.click();
+  const csv  = rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = `claribox-report-${date.replace(/\//g, '-')}.csv`;
+  a.click();
   URL.revokeObjectURL(url);
 };
 
-// ── Export to PDF ─────────────────────────────────────────────────────────────
-// Before printing — temporarily show ALL resolutions so full list is in PDF
-// After printing — restore pagination
-const exportToPDF = (setResPage, totalPages) => {
-  // Show all pages before printing
+const exportToPDF = (setResPage) => {
   setResPage(1);
-  // Small delay to let React re-render with all data visible
-  setTimeout(() => {
-    window.print();
-  }, 300);
+  setTimeout(() => window.print(), 300);
 };
 
-// ── Reports page ──────────────────────────────────────────────────────────────
+// ── Stat card ─────────────────────────────────────────────────────────────
+const StatCard = ({ icon: Icon, value, label, iconBg, iconColor, valueColor = '#0F172A' }) => (
+  <div style={{
+    background: '#FFFFFF', borderRadius: '16px',
+    border: '1px solid #E2E8F0',
+    boxShadow: '0 1px 3px rgba(15,23,42,0.04), 0 6px 16px rgba(15,23,42,0.04)',
+    padding: '18px',
+  }}>
+    <div style={{
+      width: '36px', height: '36px', borderRadius: '10px',
+      background: iconBg, display: 'flex', alignItems: 'center',
+      justifyContent: 'center', marginBottom: '12px',
+    }}>
+      {typeof Icon === 'string'
+        ? <span style={{ fontSize: '16px' }}>{Icon}</span>
+        : <Icon size={17} color={iconColor} />
+      }
+    </div>
+    <p style={{ fontSize: '28px', fontWeight: 800, color: valueColor, letterSpacing: '-0.04em', lineHeight: 1, margin: '0 0 4px' }}>
+      {value}
+    </p>
+    <p style={{ fontSize: '11px', color: '#94A3B8', fontWeight: 600, margin: 0, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+      {label}
+    </p>
+  </div>
+);
+
+// ── Pagination ────────────────────────────────────────────────────────────
+const Pagination = ({ page, total, onChange }) => {
+  if (total <= 1) return null;
+  const btn = (content, onClick, disabled, active) => (
+    <button
+      key={content}
+      onClick={onClick}
+      disabled={disabled}
+      style={{
+        width: '32px', height: '32px', borderRadius: '9px',
+        border: `1px solid ${active ? '#2563EB' : '#E2E8F0'}`,
+        background: active ? 'linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%)' : '#FFFFFF',
+        color: active ? '#FFFFFF' : '#475569',
+        fontSize: '12px', fontWeight: 700,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? 0.4 : 1,
+        boxShadow: active ? '0 3px 8px rgba(37,99,235,0.22)' : 'none',
+        transition: 'all 0.14s ease', fontFamily: font,
+      }}
+    >
+      {content}
+    </button>
+  );
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 20px', borderTop: '1px solid #F1F5F9', background: '#FAFBFC' }}
+      className="no-print">
+      <p style={{ fontSize: '11.5px', color: '#94A3B8', margin: 0, fontWeight: 500 }}>
+        Page {page} of {total}
+      </p>
+      <div style={{ display: 'flex', gap: '6px' }}>
+        {btn(<ChevronLeft size={14} />, () => onChange(p => Math.max(1, p - 1)), page === 1, false)}
+        {Array.from({ length: total }, (_, i) => i + 1).map(p =>
+          btn(p, () => onChange(p), false, p === page)
+        )}
+        {btn(<ChevronRight size={14} />, () => onChange(p => Math.min(total, p + 1)), page === total, false)}
+      </div>
+    </div>
+  );
+};
+
+// ── Main ──────────────────────────────────────────────────────────────────
 const Reports = () => {
   const [filter,       setFilter]       = useState('all');
   const [stats,        setStats]        = useState(null);
   const [categoryData, setCategoryData] = useState([]);
-  const [resolutions,  setResolutions]  = useState([]);  // ALL resolutions from backend
+  const [resolutions,  setResolutions]  = useState([]);
   const [loading,      setLoading]      = useState(true);
   const [error,        setError]        = useState(null);
-
-  // ── Pagination state for Resolved Issues table ──────────────────────────
-  // resPage — current page number (starts at 1)
-  // We paginate the resolutions array client-side
-  const [resPage, setResPage] = useState(1);
-
+  const [resPage,      setResPage]      = useState(1);
   const printRef = useRef(null);
 
-  // ── Fetch all report data ─────────────────────────────────────────────────
   const fetchData = async () => {
-    setLoading(true);
-    setError(null);
+    setLoading(true); setError(null);
     try {
       const [analyticsRes, resolutionsRes] = await Promise.all([
         adminAPI.getAnalytics({ filter }),
-        adminAPI.getResolutions()
+        adminAPI.getResolutions(),
       ]);
-
-      const analytics = analyticsRes.data;
+      const a = analyticsRes.data;
       setStats({
-        total:    analytics.stats?.total        || 0,
-        resolved: analytics.stats?.resolved     || 0,
-        positive: analytics.sentiment?.positive || 0,
-        neutral:  analytics.sentiment?.neutral  || 0,
-        negative: analytics.sentiment?.negative || 0,
+        total:    a.stats?.total        || 0,
+        resolved: a.stats?.resolved     || 0,
+        positive: a.sentiment?.positive || 0,
+        neutral:  a.sentiment?.neutral  || 0,
+        negative: a.sentiment?.negative || 0,
       });
-
-      setCategoryData(analytics.categoryData || []);
+      setCategoryData(a.categoryData || []);
       setResolutions(resolutionsRes.data.data || []);
-
-      // Reset to page 1 when data reloads
       setResPage(1);
-    } catch {
-      setError('Failed to load report data. Please try again.');
-    } finally {
-      setLoading(false);
-    }
+    } catch { setError('Failed to load report data. Please try again.'); }
+    finally  { setLoading(false); }
   };
 
   useEffect(() => { fetchData(); }, [filter]);
 
-  // ── Pagination calculations ───────────────────────────────────────────────
-  // totalResPages — how many pages needed based on total resolutions
-  // paginatedResolutions — slice of resolutions for current page only
   const totalResPages        = Math.ceil(resolutions.length / RES_PER_PAGE);
-  const paginatedResolutions = resolutions.slice(
-    (resPage - 1) * RES_PER_PAGE,
-     resPage      * RES_PER_PAGE
-  );
-
-  const reportDate = new Date().toLocaleDateString([], {
-    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
-  });
+  const paginatedResolutions = resolutions.slice((resPage - 1) * RES_PER_PAGE, resPage * RES_PER_PAGE);
+  const reportDate           = new Date().toLocaleDateString([], { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
 
   return (
-    <div className="min-h-screen bg-gray-50">
-
-      {/* Print styles — hides UI controls when saving as PDF */}
+    <div style={{ fontFamily: font }}>
       <style>{`
         @media print {
           .no-print { display: none !important; }
-          .print-page { background: white !important; padding: 0 !important; }
-          /* Show ALL resolutions when printing — override pagination */
-          .res-print-all { display: block !important; }
+          body { background: white !important; }
         }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes slideUp { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:translateY(0); } }
       `}</style>
 
-      <div className="max-w-5xl mx-auto px-6 py-8 print-page" ref={printRef}>
+      <div style={{ maxWidth: '900px', margin: '0 auto' }} ref={printRef}>
 
-        {/* ── Page header ── */}
-        <div className="flex flex-wrap items-start justify-between gap-4 mb-8 no-print">
+        {/* ── Page header ─────────────────────────────────────────── */}
+        <div className="no-print" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-start', justifyContent: 'space-between', gap: '16px', marginBottom: '28px' }}>
           <div>
-            <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">Reports</h1>
-            <p className="text-sm text-slate-500 mt-1">Export and analyse feedback data</p>
+            <h1 style={{ fontSize: '24px', fontWeight: 800, color: '#0F172A', margin: '0 0 4px', letterSpacing: '-0.035em' }}>
+              Reports
+            </h1>
+            <p style={{ fontSize: '13px', color: '#94A3B8', margin: 0, fontWeight: 500 }}>
+              Export and analyse feedback data
+            </p>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
             {/* Refresh */}
             <button
-              onClick={fetchData}
-              disabled={loading}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-200 bg-white text-slate-600 text-sm font-semibold hover:border-indigo-300 hover:text-indigo-600 transition-all cursor-pointer disabled:opacity-50"
+              onClick={fetchData} disabled={loading}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: '7px',
+                padding: '9px 16px', borderRadius: '11px',
+                border: '1px solid #E2E8F0', background: '#FFFFFF',
+                fontSize: '13px', fontWeight: 700, color: '#475569',
+                cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? 0.5 : 1,
+                fontFamily: font, transition: 'all 0.15s ease',
+                boxShadow: '0 1px 3px rgba(15,23,42,0.06)',
+              }}
+              onMouseEnter={(e) => { if (!loading) { e.currentTarget.style.borderColor = '#BFDBFE'; e.currentTarget.style.color = '#2563EB'; } }}
+              onMouseLeave={(e) => { e.currentTarget.style.borderColor = '#E2E8F0'; e.currentTarget.style.color = '#475569'; }}
             >
-              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+              <RefreshCw size={14} style={{ animation: loading ? 'spin 0.8s linear infinite' : 'none' }} />
               Refresh
             </button>
 
-            {/* Export CSV — exports ALL data including all resolution pages */}
+            {/* CSV */}
             <button
               onClick={() => stats && exportToCSV(stats, categoryData, resolutions, filter)}
               disabled={loading || !stats}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold transition-all cursor-pointer disabled:opacity-50 shadow-sm"
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: '7px',
+                padding: '9px 16px', borderRadius: '11px', border: 'none',
+                background: 'linear-gradient(135deg, #059669 0%, #047857 100%)',
+                fontSize: '13px', fontWeight: 700, color: '#FFFFFF',
+                cursor: loading || !stats ? 'not-allowed' : 'pointer',
+                opacity: loading || !stats ? 0.5 : 1, fontFamily: font,
+                boxShadow: '0 4px 12px rgba(5,150,105,0.22)', transition: 'all 0.15s ease',
+              }}
+              onMouseEnter={(e) => { if (!loading && stats) { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 6px 16px rgba(5,150,105,0.30)'; } }}
+              onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(5,150,105,0.22)'; }}
             >
-              <FileDown className="w-4 h-4" />
-              Export CSV
+              <FileDown size={14} /> Export CSV
             </button>
 
-            {/* Export PDF — opens print dialog, saves as PDF */}
+            {/* PDF */}
             <button
-              onClick={() => exportToPDF(setResPage, totalResPages)}
+              onClick={() => exportToPDF(setResPage)}
               disabled={loading || !stats}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold transition-all cursor-pointer disabled:opacity-50 shadow-sm"
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: '7px',
+                padding: '9px 16px', borderRadius: '11px', border: 'none',
+                background: 'linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%)',
+                fontSize: '13px', fontWeight: 700, color: '#FFFFFF',
+                cursor: loading || !stats ? 'not-allowed' : 'pointer',
+                opacity: loading || !stats ? 0.5 : 1, fontFamily: font,
+                boxShadow: '0 4px 12px rgba(37,99,235,0.22)', transition: 'all 0.15s ease',
+              }}
+              onMouseEnter={(e) => { if (!loading && stats) { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 6px 16px rgba(37,99,235,0.30)'; } }}
+              onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(37,99,235,0.22)'; }}
             >
-              <Printer className="w-4 h-4" />
-              Export PDF
+              <Printer size={14} /> Export PDF
             </button>
           </div>
         </div>
 
-        {/* ── Date filter ── */}
-        <div className="flex flex-wrap gap-2 mb-6 no-print">
+        {/* ── Date filter pills ────────────────────────────────────── */}
+        <div className="no-print" style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '24px' }}>
           {DATE_FILTERS.map(f => (
             <button
               key={f.value}
               onClick={() => setFilter(f.value)}
-              className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all cursor-pointer
-                ${filter === f.value
-                  ? 'bg-indigo-600 text-white shadow-sm'
-                  : 'bg-white border border-slate-200 text-slate-600 hover:border-indigo-300 hover:text-indigo-600'
-                }`}
+              style={{
+                padding: '8px 16px', borderRadius: '20px',
+                border: filter === f.value ? '1.5px solid #2563EB' : '1px solid #E2E8F0',
+                background: filter === f.value ? 'linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%)' : '#FFFFFF',
+                color: filter === f.value ? '#FFFFFF' : '#475569',
+                fontSize: '12.5px', fontWeight: 700, cursor: 'pointer', fontFamily: font,
+                boxShadow: filter === f.value ? '0 4px 10px rgba(37,99,235,0.20)' : 'none',
+                transition: 'all 0.16s ease',
+              }}
+              onMouseEnter={(e) => { if (filter !== f.value) { e.currentTarget.style.borderColor = '#93C5FD'; e.currentTarget.style.color = '#2563EB'; } }}
+              onMouseLeave={(e) => { if (filter !== f.value) { e.currentTarget.style.borderColor = '#E2E8F0'; e.currentTarget.style.color = '#475569'; } }}
             >
               {f.label}
             </button>
           ))}
         </div>
 
-        {/* ── Error ── */}
+        {/* ── Error ───────────────────────────────────────────────── */}
         {error && (
-          <div className="flex items-center gap-3 p-4 bg-red-50 border border-red-200 rounded-xl mb-6">
-            <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0" />
-            <p className="text-sm text-red-700">{error}</p>
-            <button onClick={fetchData} className="ml-auto text-xs font-bold text-red-700">Try Again</button>
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: '12px',
+            padding: '14px 18px', borderRadius: '14px', marginBottom: '20px',
+            background: '#FEF2F2', border: '1px solid #FECACA',
+            animation: 'slideUp 0.2s ease',
+          }}>
+            <AlertCircle size={16} color="#EF4444" style={{ flexShrink: 0 }} />
+            <p style={{ fontSize: '13px', color: '#B91C1C', margin: 0, flex: 1, fontWeight: 500 }}>{error}</p>
+            <button onClick={fetchData} style={{ fontSize: '12px', fontWeight: 700, color: '#B91C1C', background: 'none', border: 'none', cursor: 'pointer', fontFamily: font }}>
+              Try Again
+            </button>
           </div>
         )}
 
+        {/* ── Loading ─────────────────────────────────────────────── */}
         {loading ? (
-          <div className="flex flex-col items-center justify-center py-24 gap-3">
-            <div className="w-8 h-8 border-4 border-indigo-100 border-t-indigo-600 rounded-full animate-spin" />
-            <p className="text-sm text-slate-400">Loading report data...</p>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '80px 0', gap: '14px' }}>
+            <div style={{ width: '36px', height: '36px', borderRadius: '50%', border: '4px solid #DBEAFE', borderTopColor: '#2563EB', animation: 'spin 0.8s linear infinite' }} />
+            <p style={{ fontSize: '13px', color: '#94A3B8', margin: 0 }}>Loading report data…</p>
           </div>
         ) : stats && (
-          <div className="space-y-6">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
 
-            {/* ── Print title — only visible when printing ── */}
-            <div className="hidden print:block mb-6">
-              <h1 className="text-2xl font-black text-slate-900">ClariBox Feedback Report</h1>
-              <p className="text-sm text-slate-500 mt-1">
-                {reportDate} · {DATE_FILTERS.find(f2 => f2.value === filter)?.label}
-              </p>
+            {/* Print title */}
+            <div style={{ display: 'none' }} className="print-header">
+              <h1 style={{ fontSize: '22px', fontWeight: 900, color: '#0F172A', margin: '0 0 4px' }}>ClariBox Feedback Report</h1>
+              <p style={{ fontSize: '12px', color: '#64748B', margin: 0 }}>{reportDate} · {DATE_FILTERS.find(f => f.value === filter)?.label}</p>
             </div>
 
-            {/* ── Summary stats cards ── */}
-            <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
-              <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
-                <div className="w-9 h-9 rounded-xl bg-indigo-50 flex items-center justify-center mb-3">
-                  <MessageSquare className="w-4 h-4 text-indigo-600" />
-                </div>
-                <p className="text-2xl font-black text-slate-900">{stats.total}</p>
-                <p className="text-xs text-slate-500 font-medium mt-1">Total Feedback</p>
-              </div>
-
-              <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
-                <div className="w-9 h-9 rounded-xl bg-green-50 flex items-center justify-center mb-3">
-                  <span className="text-base">😊</span>
-                </div>
-                <p className="text-2xl font-black text-green-600">{stats.positive}</p>
-                <p className="text-xs text-slate-500 font-medium mt-1">Positive</p>
-              </div>
-
-              <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
-                <div className="w-9 h-9 rounded-xl bg-slate-50 flex items-center justify-center mb-3">
-                  <span className="text-base">😐</span>
-                </div>
-                <p className="text-2xl font-black text-slate-600">{stats.neutral}</p>
-                <p className="text-xs text-slate-500 font-medium mt-1">Neutral</p>
-              </div>
-
-              <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
-                <div className="w-9 h-9 rounded-xl bg-red-50 flex items-center justify-center mb-3">
-                  <span className="text-base">😞</span>
-                </div>
-                <p className="text-2xl font-black text-red-600">{stats.negative}</p>
-                <p className="text-xs text-slate-500 font-medium mt-1">Negative</p>
-              </div>
-
-              <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
-                <div className="w-9 h-9 rounded-xl bg-emerald-50 flex items-center justify-center mb-3">
-                  <CheckCircle className="w-4 h-4 text-emerald-600" />
-                </div>
-                <p className="text-2xl font-black text-emerald-600">{resolutions.length}</p>
-                <p className="text-xs text-slate-500 font-medium mt-1">Resolutions</p>
-              </div>
+            {/* ── Stat cards ──────────────────────────────────────── */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '14px' }}>
+              <StatCard icon={MessageSquare} value={stats.total}    label="Total Feedback" iconBg="#EFF6FF"       iconColor="#2563EB" />
+              <StatCard icon="😊"            value={stats.positive} label="Positive"       iconBg="#F0FDF4"       iconColor="#22C55E" valueColor="#15803D" />
+              <StatCard icon="😐"            value={stats.neutral}  label="Neutral"        iconBg="#F8FAFC"       iconColor="#64748B" valueColor="#475569" />
+              <StatCard icon="😞"            value={stats.negative} label="Negative"       iconBg="#FEF2F2"       iconColor="#EF4444" valueColor="#B91C1C" />
+              <StatCard icon={CheckCircle}   value={resolutions.length} label="Resolutions" iconBg="#F0FDF4"    iconColor="#22C55E" valueColor="#15803D" />
             </div>
 
-            {/* ── Feedback by category ── */}
-            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-              <div className="flex items-center gap-3 px-6 py-4 border-b border-slate-100">
-                <div className="w-8 h-8 rounded-xl bg-indigo-50 flex items-center justify-center">
-                  <TrendingUp className="w-4 h-4 text-indigo-600" />
+            {/* ── Category breakdown table ─────────────────────────── */}
+            <div style={{ background: '#FFFFFF', borderRadius: '18px', border: '1px solid #E2E8F0', boxShadow: '0 1px 3px rgba(15,23,42,0.04), 0 8px 24px rgba(15,23,42,0.04)', overflow: 'hidden' }}>
+              {/* Header */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '16px 20px', borderBottom: '1px solid #F1F5F9' }}>
+                <div style={{ width: '34px', height: '34px', borderRadius: '10px', background: 'linear-gradient(135deg, #EFF6FF, #DBEAFE)', border: '1px solid #BFDBFE', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <TrendingUp size={16} color="#2563EB" />
                 </div>
-                <h2 className="text-sm font-bold text-slate-800">Feedback by Category</h2>
+                <h2 style={{ fontSize: '13.5px', fontWeight: 800, color: '#0F172A', margin: 0, letterSpacing: '-0.02em' }}>Feedback by Category</h2>
               </div>
-              <div className="overflow-x-auto">
-                <table className="w-full">
+
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                   <thead>
-                    <tr className="bg-slate-50 border-b border-slate-100">
-                      <th className="text-left px-6 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider">Category</th>
-                      <th className="text-left px-6 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider">Count</th>
-                      <th className="text-left px-6 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider w-48">Share</th>
-                      <th className="text-right px-6 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider">%</th>
+                    <tr style={{ background: '#F8FAFC', borderBottom: '1px solid #F1F5F9' }}>
+                      {['Category', 'Count', 'Share', '%'].map((h, i) => (
+                        <th key={h} style={{ padding: '10px 20px', textAlign: i === 3 ? 'right' : 'left', fontSize: '10px', fontWeight: 800, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.08em', fontFamily: font }}>
+                          {h}
+                        </th>
+                      ))}
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-50">
+                  <tbody>
                     {categoryData.length > 0 ? categoryData.map((cat, i) => {
-                      const pct      = stats.total > 0 ? ((cat.count / stats.total) * 100).toFixed(1) : '0.0';
-                      const barColor = CATEGORY_COLORS[cat.name?.toLowerCase()] || 'bg-slate-400';
+                      const pct   = stats.total > 0 ? ((cat.count / stats.total) * 100).toFixed(1) : '0.0';
+                      const color = CATEGORY_COLORS[cat.name?.toLowerCase()] || CATEGORY_COLORS.other;
                       return (
-                        <tr key={i} className="hover:bg-slate-50 transition-colors">
-                          <td className="px-6 py-4">
-                            <div className="flex items-center gap-2">
-                              <div className={`w-2.5 h-2.5 rounded-full ${barColor}`} />
-                              <span className="text-sm font-semibold text-slate-700 capitalize">{cat.name}</span>
+                        <tr key={i} style={{ borderBottom: '1px solid #F8FAFC', transition: 'background 0.14s' }}
+                          onMouseEnter={(e) => { e.currentTarget.style.background = '#F8FAFC'; }}
+                          onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+                        >
+                          <td style={{ padding: '12px 20px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: color, boxShadow: `0 0 0 2px ${color}28`, flexShrink: 0 }} />
+                              <span style={{ fontSize: '13px', fontWeight: 600, color: '#334155', textTransform: 'capitalize' }}>{cat.name}</span>
                             </div>
                           </td>
-                          <td className="px-6 py-4">
-                            <span className="text-sm font-bold text-slate-900">{cat.count}</span>
+                          <td style={{ padding: '12px 20px' }}>
+                            <span style={{ fontSize: '13px', fontWeight: 800, color: '#0F172A' }}>{cat.count}</span>
                           </td>
-                          <td className="px-6 py-4">
-                            <div className="w-full bg-slate-100 rounded-full h-2">
-                              <div className={`h-2 rounded-full ${barColor} transition-all duration-500`} style={{ width: `${pct}%` }} />
+                          <td style={{ padding: '12px 20px', width: '180px' }}>
+                            <div style={{ height: '5px', borderRadius: '99px', background: '#F1F5F9', overflow: 'hidden' }}>
+                              <div style={{ height: '100%', width: `${pct}%`, borderRadius: '99px', background: color, boxShadow: `0 0 5px ${color}55`, transition: 'width 0.7s cubic-bezier(0.4,0,0.2,1)' }} />
                             </div>
                           </td>
-                          <td className="px-6 py-4 text-right">
-                            <span className="text-sm font-semibold text-slate-500">{pct}%</span>
+                          <td style={{ padding: '12px 20px', textAlign: 'right' }}>
+                            <span style={{ fontSize: '12px', fontWeight: 700, color: '#64748B' }}>{pct}%</span>
                           </td>
                         </tr>
                       );
                     }) : (
                       <tr>
-                        <td colSpan={4} className="px-6 py-10 text-center text-sm text-slate-400">
+                        <td colSpan={4} style={{ padding: '40px', textAlign: 'center', fontSize: '13px', color: '#94A3B8' }}>
                           No feedback data for this period
                         </td>
                       </tr>
@@ -357,72 +395,72 @@ const Reports = () => {
               </div>
             </div>
 
-            {/* ── Resolved issues with pagination ── */}
-            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-
+            {/* ── Resolutions table ────────────────────────────────── */}
+            <div style={{ background: '#FFFFFF', borderRadius: '18px', border: '1px solid #E2E8F0', boxShadow: '0 1px 3px rgba(15,23,42,0.04), 0 8px 24px rgba(15,23,42,0.04)', overflow: 'hidden' }}>
               {/* Header */}
-              <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-xl bg-emerald-50 flex items-center justify-center">
-                    <CheckCircle className="w-4 h-4 text-emerald-600" />
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: '1px solid #F1F5F9' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <div style={{ width: '34px', height: '34px', borderRadius: '10px', background: 'linear-gradient(135deg, #F0FDF4, #DCFCE7)', border: '1px solid #BBF7D0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <CheckCircle size={16} color="#22C55E" />
                   </div>
-                  <h2 className="text-sm font-bold text-slate-800">Resolved Issues</h2>
+                  <h2 style={{ fontSize: '13.5px', fontWeight: 800, color: '#0F172A', margin: 0, letterSpacing: '-0.02em' }}>Resolved Issues</h2>
                 </div>
-                <div className="flex items-center gap-3">
-                  {/* Shows current range e.g. "1-5 of 12" */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }} className="no-print">
                   {resolutions.length > 0 && (
-                    <span className="text-xs text-slate-400 no-print">
+                    <span style={{ fontSize: '11px', color: '#94A3B8', fontWeight: 500 }}>
                       {(resPage - 1) * RES_PER_PAGE + 1}–{Math.min(resPage * RES_PER_PAGE, resolutions.length)} of {resolutions.length}
                     </span>
                   )}
-                  <span className="text-xs font-bold text-emerald-600 bg-emerald-50 px-3 py-1 rounded-full">
+                  <span style={{ fontSize: '11px', fontWeight: 700, color: '#15803D', background: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: '20px', padding: '3px 10px' }}>
                     {resolutions.length} total
                   </span>
                 </div>
               </div>
 
-              {/* Table — shows paginatedResolutions (current page slice) */}
-              <div className="overflow-x-auto">
-                <table className="w-full">
+              {/* Table */}
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                   <thead>
-                    <tr className="bg-slate-50 border-b border-slate-100">
-                      <th className="text-left px-6 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider">#</th>
-                      <th className="text-left px-6 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider">Title</th>
-                      <th className="text-left px-6 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider">Category</th>
-                      <th className="text-left px-6 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider">Status</th>
-                      <th className="text-right px-6 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider">Date</th>
+                    <tr style={{ background: '#F8FAFC', borderBottom: '1px solid #F1F5F9' }}>
+                      {['#', 'Title', 'Category', 'Status', 'Date'].map((h, i) => (
+                        <th key={h} style={{ padding: '10px 20px', textAlign: i === 4 ? 'right' : 'left', fontSize: '10px', fontWeight: 800, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.08em', fontFamily: font }}>
+                          {h}
+                        </th>
+                      ))}
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-50">
+                  <tbody>
                     {paginatedResolutions.length > 0 ? paginatedResolutions.map((res, i) => {
-                      // Calculate real row number across all pages
                       const rowNum = (resPage - 1) * RES_PER_PAGE + i + 1;
+                      const s      = STATUS_STYLES[res.status] || STATUS_STYLES['Planned'];
                       return (
-                        <tr key={i} className="hover:bg-slate-50 transition-colors">
-                          <td className="px-6 py-4">
-                            <span className="text-xs text-slate-400 font-medium">{rowNum}</span>
+                        <tr key={i} style={{ borderBottom: '1px solid #F8FAFC', transition: 'background 0.14s' }}
+                          onMouseEnter={(e) => { e.currentTarget.style.background = '#F8FAFC'; }}
+                          onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+                        >
+                          <td style={{ padding: '13px 20px' }}>
+                            <span style={{ fontSize: '11px', color: '#CBD5E1', fontWeight: 600 }}>{rowNum}</span>
                           </td>
-                          <td className="px-6 py-4">
-                            <p className="text-sm font-semibold text-slate-800">{res.title}</p>
+                          <td style={{ padding: '13px 20px' }}>
+                            <p style={{ fontSize: '13px', fontWeight: 700, color: '#0F172A', margin: '0 0 2px', letterSpacing: '-0.01em' }}>{res.title}</p>
                             {res.description && (
-                              <p className="text-xs text-slate-400 mt-0.5 line-clamp-1">{res.description}</p>
+                              <p style={{ fontSize: '11.5px', color: '#94A3B8', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '240px' }}>
+                                {res.description}
+                              </p>
                             )}
                           </td>
-                          <td className="px-6 py-4">
-                            <span className="text-xs font-semibold text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-full">
+                          <td style={{ padding: '13px 20px' }}>
+                            <span style={{ fontSize: '11px', fontWeight: 700, color: '#2563EB', background: '#EFF6FF', border: '1px solid #DBEAFE', borderRadius: '20px', padding: '3px 9px' }}>
                               {res.category}
                             </span>
                           </td>
-                          <td className="px-6 py-4">
-                            <span className={`text-xs font-bold px-2.5 py-1 rounded-full
-                              ${res.status === 'Completed'   ? 'bg-green-50 text-green-700'  :
-                                res.status === 'In Progress' ? 'bg-amber-50 text-amber-700'  :
-                                                               'bg-indigo-50 text-indigo-700' }`}>
+                          <td style={{ padding: '13px 20px' }}>
+                            <span style={{ fontSize: '10.5px', fontWeight: 700, color: s.text, background: s.bg, border: `1px solid ${s.border}`, borderRadius: '20px', padding: '3px 9px' }}>
                               {res.status || 'Completed'}
                             </span>
                           </td>
-                          <td className="px-6 py-4 text-right">
-                            <span className="text-xs text-slate-400">
+                          <td style={{ padding: '13px 20px', textAlign: 'right' }}>
+                            <span style={{ fontSize: '11.5px', color: '#94A3B8', fontWeight: 500 }}>
                               {new Date(res.createdAt).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}
                             </span>
                           </td>
@@ -430,7 +468,7 @@ const Reports = () => {
                       );
                     }) : (
                       <tr>
-                        <td colSpan={5} className="px-6 py-10 text-center text-sm text-slate-400">
+                        <td colSpan={5} style={{ padding: '40px', textAlign: 'center', fontSize: '13px', color: '#94A3B8' }}>
                           No resolutions published yet
                         </td>
                       </tr>
@@ -439,62 +477,18 @@ const Reports = () => {
                 </table>
               </div>
 
-              {/* ── Pagination controls ── */}
-              {/* Only shows if there are more than RES_PER_PAGE resolutions */}
-              {totalResPages > 1 && (
-                <div className="flex items-center justify-between px-6 py-4 border-t border-slate-100 bg-slate-50 no-print">
-                  <p className="text-xs text-slate-500">
-                    Page {resPage} of {totalResPages}
-                  </p>
-                  <div className="flex items-center gap-2">
-
-                    {/* Previous page button */}
-                    <button
-                      onClick={() => setResPage(p => Math.max(1, p - 1))}
-                      disabled={resPage === 1}
-                      className="w-8 h-8 rounded-lg border border-slate-200 bg-white flex items-center justify-center text-slate-600 hover:border-indigo-300 hover:text-indigo-600 transition-all disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
-                    >
-                      <ChevronLeft className="w-4 h-4" />
-                    </button>
-
-                    {/* Page number buttons */}
-                    {Array.from({ length: totalResPages }, (_, i) => i + 1).map(p => (
-                      <button
-                        key={p}
-                        onClick={() => setResPage(p)}
-                        className={`w-8 h-8 rounded-lg text-xs font-semibold transition-all cursor-pointer
-                          ${p === resPage
-                            ? 'bg-indigo-600 text-white border border-indigo-600'
-                            : 'border border-slate-200 bg-white text-slate-600 hover:border-indigo-300'
-                          }`}
-                      >
-                        {p}
-                      </button>
-                    ))}
-
-                    {/* Next page button */}
-                    <button
-                      onClick={() => setResPage(p => Math.min(totalResPages, p + 1))}
-                      disabled={resPage === totalResPages}
-                      className="w-8 h-8 rounded-lg border border-slate-200 bg-white flex items-center justify-center text-slate-600 hover:border-indigo-300 hover:text-indigo-600 transition-all disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
-                    >
-                      <ChevronRight className="w-4 h-4" />
-                    </button>
-
-                  </div>
-                </div>
-              )}
+              <Pagination page={resPage} total={totalResPages} onChange={setResPage} />
             </div>
 
-            {/* ── Report footer ── */}
-            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm px-6 py-4 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <FileText className="w-4 h-4 text-slate-400" />
-                <span className="text-xs text-slate-400">ClariBox Feedback Report</span>
+            {/* ── Report footer ────────────────────────────────────── */}
+            <div style={{ background: '#FFFFFF', borderRadius: '16px', border: '1px solid #E2E8F0', padding: '14px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', boxShadow: '0 1px 3px rgba(15,23,42,0.04)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
+                <FileText size={14} color="#CBD5E1" />
+                <span style={{ fontSize: '11.5px', color: '#94A3B8', fontWeight: 500 }}>ClariBox Feedback Report</span>
               </div>
-              <div className="flex items-center gap-2">
-                <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                <span className="text-xs text-slate-400">{reportDate}</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <Calendar size={13} color="#CBD5E1" />
+                <span style={{ fontSize: '11.5px', color: '#94A3B8', fontWeight: 500 }}>{reportDate}</span>
               </div>
             </div>
 

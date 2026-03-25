@@ -1,37 +1,44 @@
 import { useState, useEffect } from 'react';
-import { RefreshCw, AlertCircle, BarChart3, PieChart, TrendingUp } from 'lucide-react';
+import { RefreshCw, AlertCircle, BarChart3, PieChart as PieIcon, TrendingUp } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  PieChart as RePieChart, Pie, Cell
+  PieChart, Pie, Cell,
 } from 'recharts';
 import { adminAPI } from '../../services/api';
 
-const COLORS = [
-  { bg: '#6366f1', light: 'bg-indigo-50',  text: 'text-indigo-700'  },
-  { bg: '#10b981', light: 'bg-emerald-50', text: 'text-emerald-700' },
-  { bg: '#f59e0b', light: 'bg-amber-50',   text: 'text-amber-700'   },
-  { bg: '#ef4444', light: 'bg-red-50',     text: 'text-red-700'     },
-  { bg: '#8b5cf6', light: 'bg-violet-50',  text: 'text-violet-700'  },
-  { bg: '#ec4899', light: 'bg-pink-50',    text: 'text-pink-700'    },
-  { bg: '#06b6d4', light: 'bg-cyan-50',    text: 'text-cyan-700'    },
-  { bg: '#84cc16', light: 'bg-lime-50',    text: 'text-lime-700'    },
+const font = "'Plus Jakarta Sans', 'DM Sans', sans-serif";
+
+const PALETTE = [
+  { stroke: '#2563EB', bg: 'rgba(37,99,235,0.08)',   text: '#1D4ED8'  },
+  { stroke: '#22C55E', bg: 'rgba(34,197,94,0.08)',   text: '#15803D'  },
+  { stroke: '#F59E0B', bg: 'rgba(245,158,11,0.08)',  text: '#B45309'  },
+  { stroke: '#EF4444', bg: 'rgba(239,68,68,0.08)',   text: '#B91C1C'  },
+  { stroke: '#8B5CF6', bg: 'rgba(139,92,246,0.08)',  text: '#6D28D9'  },
+  { stroke: '#EC4899', bg: 'rgba(236,72,153,0.08)',  text: '#BE185D'  },
+  { stroke: '#06B6D4', bg: 'rgba(6,182,212,0.08)',   text: '#0E7490'  },
+  { stroke: '#84CC16', bg: 'rgba(132,204,22,0.08)',  text: '#4D7C0F'  },
 ];
 
 const MEDALS = ['🥇', '🥈', '🥉'];
 
+// ── Tooltip ───────────────────────────────────────────────────────────────
 const CustomTooltip = ({ active, payload, label }) => {
-  if (active && payload && payload.length) {
-    return (
-      <div className="bg-indigo-950 rounded-xl px-4 py-2.5 shadow-xl">
-        <p className="text-xs text-indigo-300 mb-1">{label || payload[0].name}</p>
-        <p className="text-sm font-extrabold text-white">
-          {payload[0].value}
-          <span className="text-xs font-normal text-indigo-300 ml-1">submissions</span>
-        </p>
-      </div>
-    );
-  }
-  return null;
+  if (!active || !payload?.length) return null;
+  return (
+    <div style={{
+      background: '#0F172A', border: '1px solid rgba(255,255,255,0.08)',
+      borderRadius: '12px', padding: '10px 14px',
+      boxShadow: '0 8px 24px rgba(0,0,0,0.24)', fontFamily: font,
+    }}>
+      <p style={{ fontSize: '11px', color: '#94A3B8', margin: '0 0 3px', fontWeight: 500 }}>
+        {label || payload[0].name}
+      </p>
+      <p style={{ fontSize: '15px', fontWeight: 800, color: '#FFFFFF', margin: 0, letterSpacing: '-0.02em' }}>
+        {payload[0].value}
+        <span style={{ fontSize: '11px', fontWeight: 400, color: '#64748B', marginLeft: '5px' }}>submissions</span>
+      </p>
+    </div>
+  );
 };
 
 const CategoryInsights = () => {
@@ -41,63 +48,78 @@ const CategoryInsights = () => {
   const [selected,     setSelected]     = useState(null);
 
   const fetchData = async () => {
-    setLoading(true);
-    setError(null);
+    setLoading(true); setError(null);
     try {
       const response = await adminAPI.getCategoryStats();
       setCategoryData(response.data.categoryData || []);
-    } catch (err) {
-      console.error('Error:', err);
-      setError('Failed to load category insights. Please try again.');
-    } finally {
-      setLoading(false);
-    }
+    } catch { setError('Failed to load category insights. Please try again.'); }
+    finally  { setLoading(false); }
   };
 
   useEffect(() => { fetchData(); }, []);
 
   const total = categoryData.reduce((sum, c) => sum + (c.count || 0), 0);
 
-  if (loading) {
-    return (
-      <div className="flex flex-col items-center justify-center h-96 gap-4">
-        <div className="w-10 h-10 border-4 border-indigo-100 border-t-indigo-600 rounded-full animate-spin" />
-        <p className="text-sm text-slate-400">Loading category data...</p>
-      </div>
-    );
-  }
+  // ── Loading ───────────────────────────────────────────────────────────
+  if (loading) return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '380px', gap: '14px', fontFamily: font }}>
+      <div style={{ width: '36px', height: '36px', borderRadius: '50%', border: '4px solid #DBEAFE', borderTopColor: '#2563EB', animation: 'spin 0.8s linear infinite' }} />
+      <p style={{ fontSize: '13px', color: '#94A3B8', margin: 0 }}>Loading category data…</p>
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+    </div>
+  );
 
   return (
-    <div className="flex flex-col gap-5">
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', fontFamily: font }}>
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
 
-      {/* Header */}
-      <div className="relative overflow-hidden rounded-2xl px-6 py-5 flex flex-wrap items-center justify-between gap-3 shadow-lg shadow-indigo-500/20"
-        style={{ background: 'linear-gradient(135deg, #4f46e5 0%, #6366f1 100%)' }}
-      >
-        <div className="absolute -top-5 -right-5 w-28 h-28 rounded-full bg-white/10 pointer-events-none" />
-        <div className="relative flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center">
-            <PieChart className="w-5 h-5 text-white" />
+      {/* ── Page header ──────────────────────────────────────────── */}
+      <div style={{
+        position: 'relative', overflow: 'hidden', borderRadius: '20px',
+        padding: '20px 24px',
+        display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '14px',
+        background: 'linear-gradient(135deg, #1E3A8A 0%, #2563EB 55%, #1D4ED8 100%)',
+        boxShadow: '0 8px 24px rgba(37,99,235,0.22)',
+      }}>
+        <div style={{ position: 'absolute', top: '-20px', right: '-20px', width: '100px', height: '100px', borderRadius: '50%', background: 'rgba(255,255,255,0.07)', pointerEvents: 'none' }} />
+        <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', backgroundImage: 'linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px)', backgroundSize: '28px 28px' }} />
+
+        <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div style={{ width: '42px', height: '42px', borderRadius: '12px', background: 'rgba(255,255,255,0.14)', border: '1px solid rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <PieIcon size={20} color="#FFFFFF" />
           </div>
           <div>
-            <h1 className="text-base font-extrabold text-white leading-none mb-0.5">Category Insights</h1>
-            <p className="text-xs text-white/65">Analyze feedback distribution by category</p>
+            <h1 style={{ fontSize: '16px', fontWeight: 800, color: '#FFFFFF', margin: '0 0 2px', letterSpacing: '-0.025em' }}>
+              Category Insights
+            </h1>
+            <p style={{ fontSize: '11.5px', color: 'rgba(255,255,255,0.55)', margin: 0, fontWeight: 500 }}>
+              Analyze feedback distribution by category
+            </p>
           </div>
         </div>
+
         <button
           onClick={fetchData}
-          className="relative flex items-center gap-2 px-4 py-2 rounded-xl bg-white/20 hover:bg-white/30 text-white text-xs font-semibold border-none cursor-pointer transition-colors"
+          style={{
+            position: 'relative', display: 'inline-flex', alignItems: 'center', gap: '7px',
+            padding: '8px 16px', borderRadius: '20px', border: '1px solid rgba(255,255,255,0.2)',
+            background: 'rgba(255,255,255,0.12)', color: '#FFFFFF',
+            fontSize: '12.5px', fontWeight: 700, cursor: 'pointer', fontFamily: font,
+            transition: 'background 0.15s ease',
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.20)'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.12)'; }}
         >
-          <RefreshCw className="w-3.5 h-3.5" /> Refresh
+          <RefreshCw size={13} /> Refresh
         </button>
       </div>
 
-      {/* Error */}
+      {/* ── Error ────────────────────────────────────────────────── */}
       {error && (
-        <div className="flex items-center gap-3 px-4 py-3 bg-red-50 border border-red-200 rounded-xl">
-          <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0" />
-          <p className="text-sm text-red-700 flex-1">{error}</p>
-          <button onClick={fetchData} className="text-xs font-bold text-red-700 hover:text-red-900 bg-none border-none cursor-pointer">
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '13px 16px', borderRadius: '13px', background: '#FEF2F2', border: '1px solid #FECACA' }}>
+          <AlertCircle size={15} color="#EF4444" style={{ flexShrink: 0 }} />
+          <p style={{ fontSize: '13px', color: '#B91C1C', margin: 0, flex: 1, fontWeight: 500 }}>{error}</p>
+          <button onClick={fetchData} style={{ fontSize: '12px', fontWeight: 700, color: '#B91C1C', background: 'none', border: 'none', cursor: 'pointer', fontFamily: font }}>
             Try Again
           </button>
         </div>
@@ -105,129 +127,169 @@ const CategoryInsights = () => {
 
       {categoryData.length > 0 ? (
         <>
-          {/* Charts row */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {/* ── Charts row ──────────────────────────────────────── */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px' }}>
 
-            {/* Donut chart */}
-            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
-              <h2 className="text-sm font-bold text-indigo-950 mb-0.5">Distribution</h2>
-              <p className="text-xs text-slate-400 mb-4">Breakdown of feedback by category</p>
-              <div className="relative h-56">
+            {/* Donut */}
+            <div style={{ background: '#FFFFFF', borderRadius: '18px', border: '1px solid #E2E8F0', boxShadow: '0 1px 3px rgba(15,23,42,0.04), 0 8px 24px rgba(15,23,42,0.04)', padding: '20px 22px' }}>
+              <h2 style={{ fontSize: '13.5px', fontWeight: 800, color: '#0F172A', margin: '0 0 3px', letterSpacing: '-0.02em' }}>Distribution</h2>
+              <p style={{ fontSize: '11.5px', color: '#94A3B8', margin: '0 0 16px', fontWeight: 500 }}>Breakdown by category</p>
+
+              <div style={{ position: 'relative', height: '200px' }}>
                 <ResponsiveContainer width="100%" height="100%">
-                  <RePieChart>
-                    <Pie data={categoryData} cx="50%" cy="50%" innerRadius={62} outerRadius={95}
-                      paddingAngle={3} dataKey="count" nameKey="name" strokeWidth={0}>
-                      {categoryData.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length].bg} />)}
+                  <PieChart>
+                    <Pie data={categoryData} cx="50%" cy="50%" innerRadius={58} outerRadius={88} paddingAngle={3} dataKey="count" nameKey="name" strokeWidth={0}>
+                      {categoryData.map((_, i) => <Cell key={i} fill={PALETTE[i % PALETTE.length].stroke} />)}
                     </Pie>
                     <Tooltip content={<CustomTooltip />} />
-                  </RePieChart>
+                  </PieChart>
                 </ResponsiveContainer>
-                <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                  <p className="text-2xl font-black text-indigo-950 leading-none">{total}</p>
-                  <p className="text-xs text-slate-400 mt-0.5">total</p>
+                <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
+                  <p style={{ fontSize: '26px', fontWeight: 800, letterSpacing: '-0.04em', color: '#0F172A', lineHeight: 1, margin: 0 }}>{total}</p>
+                  <p style={{ fontSize: '10px', color: '#94A3B8', fontWeight: 600, margin: '3px 0 0', textTransform: 'uppercase', letterSpacing: '0.06em' }}>total</p>
                 </div>
               </div>
-              <div className="flex flex-wrap gap-2 mt-3">
+
+              {/* Legend */}
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', marginTop: '14px' }}>
                 {categoryData.map((cat, i) => (
-                  <div key={i} className="flex items-center gap-1.5">
-                    <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: COLORS[i % COLORS.length].bg }} />
-                    <span className="text-xs text-slate-500">{cat.name}</span>
+                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                    <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: PALETTE[i % PALETTE.length].stroke, flexShrink: 0 }} />
+                    <span style={{ fontSize: '11px', fontWeight: 600, color: '#64748B' }}>{cat.name}</span>
                   </div>
                 ))}
               </div>
             </div>
 
             {/* Bar chart */}
-            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
-              <h2 className="text-sm font-bold text-indigo-950 mb-0.5">Comparison</h2>
-              <p className="text-xs text-slate-400 mb-4">Submissions per category</p>
-              <div className="h-56">
+            <div style={{ background: '#FFFFFF', borderRadius: '18px', border: '1px solid #E2E8F0', boxShadow: '0 1px 3px rgba(15,23,42,0.04), 0 8px 24px rgba(15,23,42,0.04)', padding: '20px 22px' }}>
+              <h2 style={{ fontSize: '13.5px', fontWeight: 800, color: '#0F172A', margin: '0 0 3px', letterSpacing: '-0.02em' }}>Comparison</h2>
+              <p style={{ fontSize: '11.5px', color: '#94A3B8', margin: '0 0 16px', fontWeight: 500 }}>Submissions per category</p>
+              <div style={{ height: '200px' }}>
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={categoryData} layout="vertical" margin={{ left: 8, right: 16 }}>
+                  <BarChart data={categoryData} layout="vertical" margin={{ left: 4, right: 14 }}>
                     <defs>
                       <linearGradient id="barGrad" x1="0" y1="0" x2="1" y2="0">
-                        <stop offset="0%" stopColor="#4f46e5" />
-                        <stop offset="100%" stopColor="#818cf8" />
+                        <stop offset="0%" stopColor="#2563EB" />
+                        <stop offset="100%" stopColor="#60A5FA" />
                       </linearGradient>
                     </defs>
-                    <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f0f0f5" />
+                    <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#F1F5F9" />
                     <XAxis type="number" hide />
-                    <YAxis dataKey="name" type="category" width={90}
-                      tick={{ fill: '#9ca3af', fontSize: 11 }} axisLine={false} tickLine={false} />
-                    <Tooltip content={<CustomTooltip />} cursor={{ fill: '#fafafa' }} />
-                    <Bar dataKey="count" fill="url(#barGrad)" radius={[0, 6, 6, 0]} barSize={18} />
+                    <YAxis dataKey="name" type="category" width={88}
+                      tick={{ fill: '#94A3B8', fontSize: 11, fontWeight: 600, fontFamily: font }}
+                      axisLine={false} tickLine={false}
+                    />
+                    <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(37,99,235,0.04)' }} />
+                    <Bar dataKey="count" fill="url(#barGrad)" radius={[0, 6, 6, 0]} barSize={16} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
             </div>
           </div>
 
-          {/* Category cards */}
-          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-            <div className="flex items-center gap-2.5 px-5 py-4 border-b border-slate-100">
-              <BarChart3 className="w-4 h-4 text-indigo-600" />
-              <h2 className="text-sm font-bold text-indigo-950">All Categories</h2>
-              <span className="ml-auto text-xs font-bold text-indigo-700 bg-indigo-50 px-2.5 py-0.5 rounded-full">
+          {/* ── Category cards grid ──────────────────────────────── */}
+          <div style={{ background: '#FFFFFF', borderRadius: '18px', border: '1px solid #E2E8F0', boxShadow: '0 1px 3px rgba(15,23,42,0.04), 0 8px 24px rgba(15,23,42,0.04)', overflow: 'hidden' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: '1px solid #F1F5F9' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div style={{ width: '34px', height: '34px', borderRadius: '10px', background: 'linear-gradient(135deg, #EFF6FF, #DBEAFE)', border: '1px solid #BFDBFE', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <BarChart3 size={16} color="#2563EB" />
+                </div>
+                <h2 style={{ fontSize: '13.5px', fontWeight: 800, color: '#0F172A', margin: 0, letterSpacing: '-0.02em' }}>All Categories</h2>
+              </div>
+              <span style={{ fontSize: '11px', fontWeight: 700, color: '#2563EB', background: '#EFF6FF', border: '1px solid #DBEAFE', borderRadius: '20px', padding: '3px 10px' }}>
                 {categoryData.length} categories
               </span>
             </div>
-            <div className="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+
+            <div style={{ padding: '16px', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '12px' }}>
               {categoryData.map((cat, i) => {
-                const color = COLORS[i % COLORS.length];
-                const pct = total > 0 ? Math.round((cat.count / total) * 100) : 0;
+                const color      = PALETTE[i % PALETTE.length];
+                const pct        = total > 0 ? Math.round((cat.count / total) * 100) : 0;
                 const isSelected = selected === cat.name;
+
                 return (
                   <div
                     key={i}
                     onClick={() => setSelected(isSelected ? null : cat.name)}
-                    className={`p-4 rounded-xl border-2 cursor-pointer transition-all hover:-translate-y-0.5
-                      ${isSelected ? `${color.light} border-current` : 'bg-slate-50 border-slate-100 hover:border-slate-300'}`}
-                    style={{ borderColor: isSelected ? color.bg : undefined }}
+                    style={{
+                      padding: '14px', borderRadius: '14px', cursor: 'pointer',
+                      border: isSelected ? `1.5px solid ${color.stroke}` : '1px solid #E2E8F0',
+                      background: isSelected ? color.bg : '#FAFBFC',
+                      transition: 'all 0.18s ease',
+                      boxShadow: isSelected ? `0 4px 12px ${color.stroke}20` : 'none',
+                    }}
+                    onMouseEnter={(e) => { if (!isSelected) { e.currentTarget.style.borderColor = color.stroke + '60'; e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = `0 4px 12px ${color.stroke}15`; } }}
+                    onMouseLeave={(e) => { if (!isSelected) { e.currentTarget.style.borderColor = '#E2E8F0'; e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = 'none'; } }}
                   >
-                    <div className="flex items-center justify-between mb-2.5">
-                      <div className="flex items-center gap-1.5">
-                        <div className="w-2 h-2 rounded-full" style={{ background: color.bg }} />
-                        <span className="text-xs font-bold text-slate-700">{cat.name}</span>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: color.stroke, flexShrink: 0, boxShadow: `0 0 0 2px ${color.stroke}28` }} />
+                        <span style={{ fontSize: '11.5px', fontWeight: 700, color: '#334155', textTransform: 'capitalize' }}>{cat.name}</span>
                       </div>
-                      <span className="text-lg font-black text-indigo-950">{cat.count}</span>
+                      <span style={{ fontSize: '18px', fontWeight: 800, letterSpacing: '-0.03em', color: '#0F172A' }}>{cat.count}</span>
                     </div>
-                    <div className="h-1 bg-slate-200 rounded-full overflow-hidden mb-1.5">
-                      <div className="h-full rounded-full transition-all duration-700" style={{ width: `${pct}%`, background: color.bg }} />
+                    <div style={{ height: '4px', borderRadius: '99px', background: '#E2E8F0', overflow: 'hidden', marginBottom: '7px' }}>
+                      <div style={{ height: '100%', width: `${pct}%`, borderRadius: '99px', background: color.stroke, boxShadow: `0 0 5px ${color.stroke}55`, transition: 'width 0.7s cubic-bezier(0.4,0,0.2,1)' }} />
                     </div>
-                    <p className={`text-xs font-semibold text-right ${color.text}`}>{pct}% of total</p>
+                    <p style={{ fontSize: '10.5px', fontWeight: 700, color: color.text, margin: 0, textAlign: 'right' }}>{pct}% of total</p>
                   </div>
                 );
               })}
             </div>
           </div>
 
-          {/* Top categories ranked */}
-          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-            <div className="flex items-center gap-2.5 px-5 py-4 bg-gradient-to-r from-indigo-600 to-indigo-500">
-              <TrendingUp className="w-4 h-4 text-white" />
-              <h2 className="text-sm font-bold text-white">Top Categories by Volume</h2>
+          {/* ── Top ranked ───────────────────────────────────────── */}
+          <div style={{ background: '#FFFFFF', borderRadius: '18px', border: '1px solid #E2E8F0', boxShadow: '0 1px 3px rgba(15,23,42,0.04), 0 8px 24px rgba(15,23,42,0.04)', overflow: 'hidden' }}>
+            {/* Header */}
+            <div style={{
+              position: 'relative', overflow: 'hidden',
+              background: 'linear-gradient(135deg, #1E3A8A 0%, #2563EB 55%, #1D4ED8 100%)',
+              padding: '14px 20px', display: 'flex', alignItems: 'center', gap: '10px',
+            }}>
+              <div style={{ position: 'absolute', top: '-12px', right: '-12px', width: '60px', height: '60px', borderRadius: '50%', background: 'rgba(255,255,255,0.07)', pointerEvents: 'none' }} />
+              <TrendingUp size={16} color="#FFFFFF" />
+              <h2 style={{ fontSize: '13px', fontWeight: 800, color: '#FFFFFF', margin: 0, letterSpacing: '-0.02em' }}>
+                Top Categories by Volume
+              </h2>
             </div>
-            <div className="divide-y divide-slate-50">
+
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
               {[...categoryData]
                 .sort((a, b) => b.count - a.count)
                 .map((cat, i) => {
-                  const color = COLORS[categoryData.indexOf(cat) % COLORS.length];
-                  const pct = total > 0 ? Math.round((cat.count / total) * 100) : 0;
+                  const origIdx = categoryData.indexOf(cat);
+                  const color   = PALETTE[origIdx % PALETTE.length];
+                  const pct     = total > 0 ? Math.round((cat.count / total) * 100) : 0;
+
                   return (
-                    <div key={i} className="flex items-center gap-3.5 px-5 py-3.5 hover:bg-slate-50 transition-colors">
-                      <span className={`font-extrabold min-w-7 ${i < 3 ? 'text-lg' : 'text-xs text-slate-400'}`}>
+                    <div
+                      key={i}
+                      style={{ display: 'flex', alignItems: 'center', gap: '14px', padding: '13px 20px', borderBottom: '1px solid #F8FAFC', transition: 'background 0.14s' }}
+                      onMouseEnter={(e) => { e.currentTarget.style.background = '#F8FAFC'; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+                    >
+                      {/* Rank */}
+                      <span style={{ fontSize: i < 3 ? '18px' : '11px', fontWeight: 800, color: i < 3 ? 'inherit' : '#6366F1', minWidth: '28px', textAlign: 'center', lineHeight: 1 }}>
                         {MEDALS[i] || `#${i + 1}`}
                       </span>
-                      <div className="flex-1">
-                        <div className="flex justify-between mb-1.5">
-                          <span className="text-sm font-semibold text-slate-700">{cat.name}</span>
-                          <span className="text-xs font-bold text-slate-500">{cat.count}</span>
+
+                      {/* Bar */}
+                      <div style={{ flex: 1 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
+                            <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: color.stroke, flexShrink: 0, boxShadow: `0 0 0 2px ${color.stroke}28` }} />
+                            <span style={{ fontSize: '13px', fontWeight: 700, color: '#334155', textTransform: 'capitalize', letterSpacing: '-0.01em' }}>{cat.name}</span>
+                          </div>
+                          <span style={{ fontSize: '12px', fontWeight: 700, color: '#64748B' }}>{cat.count}</span>
                         </div>
-                        <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                          <div className="h-full rounded-full transition-all duration-700" style={{ width: `${pct}%`, background: color.bg }} />
+                        <div style={{ height: '5px', borderRadius: '99px', background: '#F1F5F9', overflow: 'hidden' }}>
+                          <div style={{ height: '100%', width: `${pct}%`, borderRadius: '99px', background: color.stroke, boxShadow: `0 0 5px ${color.stroke}55`, transition: 'width 0.7s cubic-bezier(0.4,0,0.2,1)' }} />
                         </div>
                       </div>
-                      <span className={`text-xs font-bold px-2.5 py-1 rounded-full min-w-10 text-center ${color.light} ${color.text}`}>
+
+                      {/* Pct pill */}
+                      <span style={{ fontSize: '11px', fontWeight: 700, color: color.text, background: color.bg, border: `1px solid ${color.stroke}28`, borderRadius: '20px', padding: '3px 10px', minWidth: '44px', textAlign: 'center', flexShrink: 0 }}>
                         {pct}%
                       </span>
                     </div>
@@ -237,13 +299,15 @@ const CategoryInsights = () => {
           </div>
         </>
       ) : (
-        /* Empty state */
-        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm py-16 flex flex-col items-center gap-3 text-center">
-          <div className="w-14 h-14 rounded-full bg-indigo-50 flex items-center justify-center">
-            <BarChart3 className="w-7 h-7 text-indigo-600" />
+        /* ── Empty state ──────────────────────────────────────── */
+        <div style={{ background: '#FFFFFF', borderRadius: '18px', border: '1px solid #E2E8F0', boxShadow: '0 1px 3px rgba(15,23,42,0.04)', padding: '64px 24px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px', textAlign: 'center' }}>
+          <div style={{ width: '52px', height: '52px', borderRadius: '16px', background: 'linear-gradient(135deg, #EFF6FF, #DBEAFE)', border: '1px solid #BFDBFE', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 12px rgba(37,99,235,0.12)' }}>
+            <BarChart3 size={24} color="#2563EB" />
           </div>
-          <h3 className="text-base font-bold text-indigo-950">No Category Data Yet</h3>
-          <p className="text-sm text-slate-400 max-w-sm">Category insights will appear here once students submit feedback.</p>
+          <h3 style={{ fontSize: '15px', fontWeight: 800, color: '#0F172A', margin: 0, letterSpacing: '-0.025em' }}>No Category Data Yet</h3>
+          <p style={{ fontSize: '13px', color: '#94A3B8', margin: 0, maxWidth: '280px', lineHeight: '1.6' }}>
+            Category insights will appear here once students submit feedback.
+          </p>
         </div>
       )}
     </div>

@@ -1,6 +1,7 @@
 import { Link, useLocation } from 'react-router-dom';
 import { Menu, X, MessageSquare, Sparkles } from 'lucide-react';
 import { useState } from 'react';
+import clariLogo from '../../assets/clari.png';
 
 const Navbar = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -12,41 +13,44 @@ const Navbar = () => {
 
       <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
 
-        {/* Logo */}
-        <Link to="/" className="flex items-center gap-2.5 no-underline">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-600 to-violet-600 flex items-center justify-center shadow-md shadow-indigo-500/30 flex-shrink-0">
-            <MessageSquare className="w-4.5 h-4.5 text-white" size={18} />
-          </div>
-          <span className="text-lg font-extrabold text-indigo-950 tracking-tight">
-            Clari<span className="text-indigo-600">Box</span>
-          </span>
-        </Link>
+          {/* Logo */}
+          <Link to="/" className="flex items-center gap-0 no-underline">
+            <img
+              src={clariLogo}
+              alt="ClariBox"
+              className="w-32 h-32 object-contain"
+            />
 
-        {/* Desktop nav */}
-        <div className="hidden md:flex items-center gap-7">
-          <Link
-            to="/"
-            className={`text-sm font-medium pb-0.5 border-b-2 transition-colors no-underline
-              ${isActive('/') ? 'text-indigo-600 border-indigo-500' : 'text-slate-500 border-transparent hover:text-slate-800'}`}
-          >
-            Home
-          </Link>
-          <Link
-            to="/submit"
-            className={`text-sm font-medium pb-0.5 border-b-2 transition-colors no-underline
-              ${isActive('/submit') ? 'text-indigo-600 border-indigo-500' : 'text-slate-500 border-transparent hover:text-slate-800'}`}
-          >
-            Submit Feedback
+            <span className="text-2xl font-extrabold tracking-tight text-[#60A5FA] -ml-8">
+              Clari<span className="text-[#4ADE80]">Box</span>
+            </span>
           </Link>
 
-          {/* CTA */}
-          <Link
-            to="/submit"
-            className="flex items-center gap-1.5 px-5 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-500 text-white text-sm font-bold shadow-md shadow-indigo-500/30 hover:shadow-lg hover:shadow-indigo-500/40 hover:-translate-y-0.5 transition-all no-underline"
-          >
-            <Sparkles className="w-3.5 h-3.5" />
-            Speak Up
-          </Link>
+                  {/* Desktop nav */}
+          <div className="hidden md:flex items-center gap-7">
+            <Link
+              to="/"
+              className={`text-sm font-medium pb-0.5 border-b-2 transition-colors no-underline
+                ${isActive('/') ? 'text-[#60A5FA] border-[#60A5FA]' : 'text-slate-500 border-transparent hover:text-[#4ADE80] hover:border-[#4ADE80]'}`}
+            >
+              Home
+            </Link>
+            <Link
+              to="/submit"
+              className={`text-sm font-medium pb-0.5 border-b-2 transition-colors no-underline
+                ${isActive('/submit') ? 'text-[#60A5FA] border-[#60A5FA]' : 'text-slate-500 border-transparent hover:text-[#4ADE80] hover:border-[#4ADE80]'}`}
+            >
+              Submit Feedback
+            </Link>
+
+              {/* CTA */}
+              <Link
+                to="/submit"
+                className="flex items-center gap-1.5 px-5 py-2 rounded-xl bg-gradient-to-r from-[#2563EB] to-[#4ADE80] text-white text-sm font-bold shadow-md shadow-blue-500/30 hover:shadow-lg hover:shadow-green-500/40 hover:-translate-y-0.5 transition-all no-underline"
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                Speak Up
+              </Link>
         </div>
 
         {/* Mobile toggle */}
