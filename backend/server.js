@@ -19,7 +19,14 @@ const app    = express();
 const server = http.createServer(app);
 
 // ── Middleware ────────────────────────────────────────────────────────────────
-app.use(cors());
+app.use(cors({
+    origin: [
+        "https://claribox.com",
+        "https://www.claribox.com",
+        "http://localhost:5173"
+    ],
+    credentials: true
+}));
 app.use(express.json());
 app.use(rateLimit({
     windowMs: 15 * 60 * 1000,
