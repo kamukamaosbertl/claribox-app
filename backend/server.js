@@ -52,7 +52,7 @@ app.use('/api/auth',          require('./routes/authRoutes'));
 app.use('/api/feedback',      require('./routes/feedbackRoutes'));
 app.use('/api/admin',         require('./routes/adminRoutes'));
 app.use('/api/ai',            require('./routes/aiRoutes'));
-app.use('/api/notifications', require('./routes/notificationRoutes'));
+app.use('/api/notifications', require('./routes/Notificationroutes'));
 
 // ── Weekly email report — every Monday at 8am ────────────────────────────────
 cron.schedule('0 8 * * 1', async () => {

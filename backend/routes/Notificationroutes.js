@@ -2,6 +2,7 @@ const express      = require('express');
 const router       = express.Router();
 const jwt          = require('jsonwebtoken');
 const Notification = require('../models/Notification');
+//auth middleware
 
 // ── Auth middleware ───────────────────────────────────────────────────────────
 const auth = (req, res, next) => {
