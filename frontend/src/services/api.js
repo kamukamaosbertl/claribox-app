@@ -106,10 +106,10 @@ export const studentAPI = {
 export const adminAPI = {
 
   /* --- Auth --- */
-  login:          (credentials) => api.post('/auth/login',           credentials),
-  register:       (data)        => api.post('/auth/register',        data),
-  googleLogin:    (accessToken) => api.post('/auth/google',          { accessToken }),
-  changePassword: (data)        => api.post('/auth/change-password', data),
+  login:          (credentials) => api.post('/api/auth/login',           credentials),
+  register:       (data)        => api.post('/api/auth/register',        data),
+  googleLogin:    (accessToken) => api.post('/api/auth/google',          { accessToken }),
+  changePassword: (data)        => api.post('/api/auth/change-password', data),
   logout: () => {
     localStorage.removeItem('adminToken');
     localStorage.removeItem('adminUser');
