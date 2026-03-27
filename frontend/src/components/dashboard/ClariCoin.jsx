@@ -3,7 +3,7 @@
 // Usage: <ClariCoin size={48} />
 
 import React from 'react';
-import clariLogo from '../../assets/clari.png'; // adjust path if needed
+import clariLogo from '../../assets/Clari.png'; // adjust path if needed
 
 const ClariCoin = ({ size = 48 }) => {
   // Outer wrapper — fixed position + dark circular backdrop

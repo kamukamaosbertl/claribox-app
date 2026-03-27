@@ -14,7 +14,7 @@ import {
 import { adminAPI } from '../../services/api';
 
 // ── Import logo from assets (fixes logo not showing) ───────────────────────
-import clariLogo from '../../assets/clari.png';
+import clariLogo from '../../assets/Clari.png';
 
 const font = "'Plus Jakarta Sans', 'DM Sans', sans-serif";
 
