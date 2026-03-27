@@ -6,6 +6,7 @@
 const { Resend } = require('resend');
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL;
 const resend      = new Resend(process.env.RESEND_API_KEY);
+const CLIENT_URL  = process.env.CLIENT_URL || 'http://localhost:5173';
 
 // ── Get admin notification preferences from MongoDB ───────────────────────────
 // Called before sending each email to check if that type is enabled
@@ -93,13 +94,13 @@ async function sendWeeklyReport(stats) {
               </table>` : '<p style="color:#9ca3af;margin-bottom:32px;">No feedback received this week.</p>'}
               ${total === 0 ? `<div style="background:#f0fdf4;border-radius:14px;padding:20px;text-align:center;margin-bottom:32px;"><p style="margin:0;color:#059669;font-weight:600;">✅ No feedback this week — all quiet!</p></div>` : ''}
               <div style="text-align:center;margin-bottom:24px;">
-                <a href="http://localhost:5173/admin/dashboard" style="display:inline-block;padding:14px 32px;background:linear-gradient(135deg,#4f46e5,#6366f1);color:#fff;text-decoration:none;border-radius:12px;font-weight:700;font-size:14px;">
+                <a href="${CLIENT_URL}/admin/dashboard" style="display:inline-block;padding:14px 32px;background:linear-gradient(135deg,#4f46e5,#6366f1);color:#fff;text-decoration:none;border-radius:12px;font-weight:700;font-size:14px;">
                   View Full Dashboard →
                 </a>
               </div>
             </div>
             <div style="background:#f8f8fc;padding:20px 32px;text-align:center;border-top:1px solid #f0f0f5;">
-              <p style="margin:0;font-size:12px;color:#9ca3af;">ClariBox · Weekly Report · <a href="http://localhost:5173/admin/settings" style="color:#6366f1;">Manage email preferences</a></p>
+              <p style="margin:0;font-size:12px;color:#9ca3af;">ClariBox · Weekly Report · <a href="${CLIENT_URL}/admin/settings" style="color:#6366f1;">Manage email preferences</a></p>
             </div>
           </div>
         </body>
@@ -146,13 +147,13 @@ async function sendInactivityReminder(unreadCount) {
               </div>
               <p style="color:#6b7280;font-size:14px;line-height:1.6;">Students have submitted feedback that hasn't been reviewed yet.</p>
               <div style="text-align:center;margin:24px 0;">
-                <a href="http://localhost:5173/admin/dashboard" style="display:inline-block;padding:14px 32px;background:linear-gradient(135deg,#4f46e5,#6366f1);color:#fff;text-decoration:none;border-radius:12px;font-weight:700;font-size:14px;">
+                <a href="${CLIENT_URL}/admin/dashboard" style="display:inline-block;padding:14px 32px;background:linear-gradient(135deg,#4f46e5,#6366f1);color:#fff;text-decoration:none;border-radius:12px;font-weight:700;font-size:14px;">
                   Review Feedback →
                 </a>
               </div>
             </div>
             <div style="background:#f8f8fc;padding:20px 32px;text-align:center;border-top:1px solid #f0f0f5;">
-              <p style="margin:0;font-size:12px;color:#9ca3af;">ClariBox · <a href="http://localhost:5173/admin/settings" style="color:#6366f1;">Manage email preferences</a></p>
+              <p style="margin:0;font-size:12px;color:#9ca3af;">ClariBox · <a href="${CLIENT_URL}/admin/settings" style="color:#6366f1;">Manage email preferences</a></p>
             </div>
           </div>
         </body>
@@ -200,16 +201,16 @@ async function sendSpikeAlert(count, category) {
                 </p>
               </div>
               <div style="text-align:center;margin:24px 0;display:flex;gap:12px;justify-content:center;">
-                <a href="http://localhost:5173/admin/login" style="display:inline-block;padding:14px 28px;background:linear-gradient(135deg,#dc2626,#ef4444);color:#fff;text-decoration:none;border-radius:12px;font-weight:700;font-size:14px;">
+                <a href="${CLIENT_URL}/admin/login" style="display:inline-block;padding:14px 28px;background:linear-gradient(135deg,#dc2626,#ef4444);color:#fff;text-decoration:none;border-radius:12px;font-weight:700;font-size:14px;">
                   Login to Review →
                 </a>
-                <a href="http://localhost:5173/admin/login?redirect=/admin/chat" style="display:inline-block;padding:14px 28px;background:linear-gradient(135deg,#4f46e5,#6366f1);color:#fff;text-decoration:none;border-radius:12px;font-weight:700;font-size:14px;">
+                <a href="${CLIENT_URL}/admin/login?redirect=/admin/chat" style="display:inline-block;padding:14px 28px;background:linear-gradient(135deg,#4f46e5,#6366f1);color:#fff;text-decoration:none;border-radius:12px;font-weight:700;font-size:14px;">
                   Ask AI About This →
                 </a>
               </div>
             </div>
             <div style="background:#f8f8fc;padding:20px 32px;text-align:center;border-top:1px solid #f0f0f5;">
-              <p style="margin:0;font-size:12px;color:#9ca3af;">ClariBox · <a href="http://localhost:5173/admin/settings" style="color:#6366f1;">Manage email preferences</a></p>
+              <p style="margin:0;font-size:12px;color:#9ca3af;">ClariBox · <a href="${CLIENT_URL}/admin/settings" style="color:#6366f1;">Manage email preferences</a></p>
             </div>
           </div>
         </body>
@@ -251,7 +252,7 @@ async function sendSecurityAlert(adminName, changeType) {
                 </p>
               </div>
               <div style="text-align:center;margin:24px 0;">
-                <a href="http://localhost:5173/admin/login" style="display:inline-block;padding:14px 32px;background:linear-gradient(135deg,#d97706,#f59e0b);color:#fff;text-decoration:none;border-radius:12px;font-weight:700;font-size:14px;">
+                <a href="${CLIENT_URL}/admin/login" style="display:inline-block;padding:14px 32px;background:linear-gradient(135deg,#d97706,#f59e0b);color:#fff;text-decoration:none;border-radius:12px;font-weight:700;font-size:14px;">
                   Verify My Account →
                 </a>
               </div>
