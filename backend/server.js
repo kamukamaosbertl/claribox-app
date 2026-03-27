@@ -21,8 +21,9 @@ const server = http.createServer(app);
 // ── Middleware ────────────────────────────────────────────────────────────────
 app.use(cors({
     origin: [
-        "https://claribox.com",
-        "https://www.claribox.com",
+        "https://studentfeedback.com",
+        "https://www.studentfeedback.com",
+        "https://claribox-app-jjmk.vercel.app",
         "http://localhost:5173"
     ],
     credentials: true
