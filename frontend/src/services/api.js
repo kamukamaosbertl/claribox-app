@@ -39,7 +39,7 @@ api.interceptors.response.use(
 export async function chatWithAIStream(message, sessionId, onChunk, onError) {
   try {
     const token = localStorage.getItem('adminToken');
-    const response = await fetch(`${API_BASE_URL}/ai/chat/stream`, {
+    const response = await fetch(`${API_BASE_URL}/api/ai/chat/stream`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -88,7 +88,7 @@ export const studentAPI = {
 
   submitFeedback: (data) => {
     const isFormData = data instanceof FormData;
-    return api.post('/feedback/submit', data, {
+    return api.post('/api/feedback/submit', data, {
       headers: {
         'Content-Type': isFormData ? 'multipart/form-data' : 'application/json',
       },
@@ -96,7 +96,7 @@ export const studentAPI = {
   },
 
   getStats: async () => {
-    const res = await api.get('/feedback/stats/public');
+    const res = await api.get('/api/feedback/stats/public');
     return res.data;
   },
 
@@ -116,14 +116,14 @@ export const adminAPI = {
   },
 
   /* --- Notification Preferences --- */
-  getNotificationPrefs:  ()     => api.get('/admin/notification-prefs'),
-  saveNotificationPrefs: (data) => api.put('/admin/notification-prefs', data),
+  getNotificationPrefs:  ()     => api.get('/api/admin/notification-prefs'),
+  saveNotificationPrefs: (data) => api.put('/api/admin/notification-prefs', data),
 
   /* --- Profile --- */
-  getProfile:    ()     => api.get('/admin/profile'),
+  getProfile:    ()     => api.get('/api/admin/profile'),
   updateProfile: (data) => {
     const isFormData = data instanceof FormData;
-    return api.put('/admin/profile', data, {
+    return api.put('/api/admin/profile', data, {
       headers: { 'Content-Type': isFormData ? 'multipart/form-data' : 'application/json' }
     });
   },
@@ -138,35 +138,35 @@ export const adminAPI = {
     if (filters.limit)     params.append('limit',     filters.limit);
     if (filters.page)      params.append('page',      filters.page);
     if (filters.filter)    params.append('filter',    filters.filter);
-    return api.get(`/admin/feedback?${params.toString()}`);
+    return api.get(`/api/admin/feedback?${params.toString()}`);
   },
 
-  updateFeedbackStatus: (id, data) => api.put(`/admin/feedback/${id}`, data),
+  updateFeedbackStatus: (id, data) => api.put(`/api/admin/feedback/${id}`, data),
 
   /* --- Analytics & Insights --- */
-  getAnalytics:     (params = {}) => api.get('/admin/analytics',  { params }),
-  getTrends:        (params = {}) => api.get('/admin/trends',     { params }),
-  getTimeStats:     (params = {}) => api.get('/admin/stats/time', { params }),
-  getCategoryStats: (params = {}) => api.get('/admin/analytics',  { params }),
+  getAnalytics:     (params = {}) => api.get('/api/admin/analytics',  { params }),
+  getTrends:        (params = {}) => api.get('/api/admin/trends',     { params }),
+  getTimeStats:     (params = {}) => api.get('/api/admin/stats/time', { params }),
+  getCategoryStats: (params = {}) => api.get('/api/admin/analytics',  { params }),
 
   /* --- AI Chat & Summaries --- */
   // chatWithAI — simple non-streaming version (fallback)
-  chatWithAI: (message, history) => api.post('/ai/chat', { message, history }),
+  chatWithAI: (message, history) => api.post('/api/ai/chat', { message, history }),
   // chatWithAIStream — streaming version used by ChatWithAI.jsx
   // imported separately as named export above
   chatWithAIStream,
-  getSummary: (id) => api.get(`/ai/summary/${id}`),
+  getSummary: (id) => api.get(`/api/ai/summary/${id}`),
 
   /* --- Notifications --- */
-  getNotifications:         ()   => api.get('/notifications'),
-  markNotificationRead:     (id) => api.patch(`/notifications/${id}/read`),
-  markAllNotificationsRead: ()   => api.patch('/notifications/read-all'),
-  deleteNotification:       (id) => api.delete(`/notifications/${id}`),
+  getNotifications:         ()   => api.get('/api/notifications'),
+  markNotificationRead:     (id) => api.patch(`/api/notifications/${id}/read`),
+  markAllNotificationsRead: ()   => api.patch('/api/notifications/read-all'),
+  deleteNotification:       (id) => api.delete(`/api/notifications/${id}`),
 
   /* --- Resolution Management --- */
-  getResolutions:   ()     => api.get('/admin/resolutions'),
-  createResolution: (data) => api.post('/admin/resolutions', data),
-  deleteResolution: (id)   => api.delete(`/admin/resolutions/${id}`),
+  getResolutions:   ()     => api.get('/api/admin/resolutions'),
+  createResolution: (data) => api.post('/api/admin/resolutions', data),
+  deleteResolution: (id)   => api.delete(`/api/admin/resolutions/${id}`),
 
 };
 
