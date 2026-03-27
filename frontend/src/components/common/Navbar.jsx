@@ -1,7 +1,7 @@
 import { Link, useLocation } from 'react-router-dom';
 import { Menu, X, MessageSquare, Sparkles } from 'lucide-react';
 import { useState } from 'react';
-import clariLogo from '../../assets/clari.png';
+import clariLogo from '../../assets/Clari.png';
 
 const Navbar = () => {
   const [isOpen, setIsOpen] = useState(false);
