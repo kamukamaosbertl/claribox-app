@@ -22,8 +22,10 @@ function initSocketIO(httpServer) {
             const decoded    = jwt.verify(token, process.env.JWT_SECRET);
             socket.adminId   = decoded.id || decoded._id;
             socket.adminName = decoded.name || 'Admin';
+            console.log('✅ Socket auth success:', socket.adminName); // ADD THIS
             next();
         } catch (err) {
+            console.log('❌ Socket auth failed:', err.message); // ADD THIS
             next(new Error('Invalid or expired token'));
         }
     });
