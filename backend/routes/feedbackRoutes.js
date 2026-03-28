@@ -171,6 +171,7 @@ router.post('/submit', upload.single('evidenceFile'), async (req, res) => {
                 // Check for urgent keywords FIRST — highest priority
                 // NEW: detectUrgency scans for safety/harassment/health etc.
                 const urgentReason = detectUrgency(safeFeedback);
+                console.log('🚨 Urgency check:', safeFeedback, '→', urgentReason);
 
                 if (urgentReason) {
                     // Create urgent notification in DB
