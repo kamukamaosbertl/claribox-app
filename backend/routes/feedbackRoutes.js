@@ -200,6 +200,7 @@ router.post('/submit', upload.single('evidenceFile'), async (req, res) => {
                         category: category,
                         feedback: safeFeedback
                     }, urgentReason);
+                    console.log('📡 emitUrgentAlert fired for:', newFeedback._id); 
 
                 } else if (sentimentResult.label === 'negative') {
                     // Original negative feedback notification — kept exactly as before
