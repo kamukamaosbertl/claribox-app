@@ -39,8 +39,25 @@ const AdminLayout = () => {
 
   const navigate = useNavigate();
 
+  const isTokenExpired = (token) => {
+    try {
+        const payload = JSON.parse(atob(token.split('.')[1]));
+        return payload.exp * 1000 < Date.now();
+    } catch {
+        return true;
+    }
+};
+
   useEffect(() => {
     const fetchAdminData = async () => {
+      // Token expiry check
+      const token = localStorage.getItem('adminToken');
+      if (!token || isTokenExpired(token)) {
+          localStorage.removeItem('adminToken');
+          localStorage.removeItem('adminUser');
+          navigate('/admin/login');
+          return;
+      }
       try {
         const response = await adminAPI.getProfile();
         const d = response?.data?.data || response?.data || null;
