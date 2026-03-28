@@ -1,7 +1,12 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom'; // ← ADDED (needed for onView navigation)
 import { AlertCircle, RefreshCw } from 'lucide-react';
 import { useDashboardData } from '../../hooks/useDashboardData';
 import { dashboardConfig } from '../../config/dashboardConfig';
+
+// ← ADDED: Real-time hook and urgent alert banner
+import { useRealTimeNotifications } from '../../hooks/useRealTimeNotifications';
+import { UrgentAlertBanner } from './UrgentAlertBanner';
 
 import DashboardHeader from './DashboardHeader';
 import StatsCards from './StatsCards';
@@ -14,7 +19,7 @@ import ResolutionsPanel from './ResolutionsPanel';
 import ResolutionModal from './ResolutionModal';
 import AiCTA from './AiCTA';
 import SentimentAnalysis from './SentimentAnalysis';
-import ClariCoin from './ClariCoin'; // ← added
+import ClariCoin from './ClariCoin';
 
 // ─────────────────────────────────────────────
 // Section wrapper — shared card shell
@@ -85,6 +90,11 @@ const Dashboard = () => {
     }
   });
 
+  const navigate = useNavigate(); // ← ADDED (needed for onView navigation)
+
+  // ← ADDED: Wire up real-time socket hook
+  const { urgentAlerts, dismissAlert } = useRealTimeNotifications();
+
   const { data, loading, error, lastUpdated, refresh } = useDashboardData(dateFilter);
 
   const thisWeekCount = data?.stats?.thisWeekCount ?? 0;
@@ -108,7 +118,6 @@ const Dashboard = () => {
             shadow-[0_10px_40px_rgba(15,23,42,0.08)]
           "
         >
-          {/* Spinner */}
           <div
             className="
               w-14 h-14 rounded-full border-4 border-[#DBEAFE] border-t-[#2563EB]
@@ -163,6 +172,13 @@ const Dashboard = () => {
           </div>
         )}
 
+        {/* ── ADDED: Urgent alert banners ───────────────────────────────────── */}
+        <UrgentAlertBanner
+          alerts={urgentAlerts}
+          onDismiss={dismissAlert}
+          onView={() => navigate('/admin/feedback')}
+        />
+
         {/* ── Error banner ─────────────────────────────────────────────────── */}
         {error && (
           <div
@@ -203,12 +219,9 @@ const Dashboard = () => {
 
         {/* ── Stats row + Date filter ───────────────────────────────────────── */}
         <div className="grid grid-cols-1 lg:grid-cols-[3fr_1fr] gap-5 mb-6 items-start">
-          {/* Stats cards */}
           <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }}>
             <StatsCards stats={data.stats} />
           </div>
-
-          {/* Date filter card */}
           <SectionCard className="p-5 self-start">
             <SectionHeader
               title="Filter Overview"
@@ -223,7 +236,6 @@ const Dashboard = () => {
           className="grid gap-5 mb-6"
           style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))' }}
         >
-          {/* Sentiment spans full width */}
           {dashboardConfig.showSentimentAnalysis && (
             <SectionCard className="col-span-full p-6 px-7">
               <SectionHeader
@@ -235,7 +247,6 @@ const Dashboard = () => {
             </SectionCard>
           )}
 
-          {/* Category chart — wider */}
           {dashboardConfig.showCharts && dashboardConfig.showCategoryChart && (
             <SectionCard
               className="h-[340px] p-6 px-7 overflow-hidden"
@@ -249,7 +260,6 @@ const Dashboard = () => {
             </SectionCard>
           )}
 
-          {/* Timeline chart */}
           {dashboardConfig.showCharts && dashboardConfig.showTimeline && (
             <SectionCard className="h-[340px] p-6 px-7 overflow-hidden">
               <SectionHeader
@@ -293,7 +303,6 @@ const Dashboard = () => {
         {dashboardConfig.showResolutionsPanel && (
           <div className="mb-6">
             <SectionCard>
-              {/* Card header row with bottom border */}
               <div
                 className="
                   border-b border-[#F1F5F9] px-7 py-5
@@ -326,7 +335,6 @@ const Dashboard = () => {
                   All resolved
                 </span>
               </div>
-
               <div className="p-6 px-7">
                 <ResolutionsPanel resolutions={data.resolutions} onRefresh={refresh} />
               </div>
@@ -349,7 +357,6 @@ const Dashboard = () => {
                 background: 'linear-gradient(135deg, #1E40AF 0%, #2563EB 60%, #1D4ED8 100%)',
               }}
             >
-              {/* Mesh background */}
               <div
                 className="absolute inset-0 pointer-events-none"
                 style={{

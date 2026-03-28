@@ -41,6 +41,7 @@ export function useRealTimeNotifications(onNewNotification) {
 
         // ── Urgent alert ─────────────────────────────────────────
         socket.on('feedback:urgent', (data) => {
+                console.log('🚨 Urgent event received:', data); // ADD THIS
             setUrgentAlerts(prev => [{
                 id:        data.id,
                 category:  data.category,
