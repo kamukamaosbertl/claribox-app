@@ -13,27 +13,30 @@ const TopProgressBar = () => {
       return;
     }
 
-    // Start immediately at 30%
+    // Reset and show
+    setProgress(0);
     setVisible(true);
-    setProgress(30);
 
-    // Quickly creep to 85% over ~300ms
+    // Slowly creep from 0 → 80% over ~1.5s so user can see it moving
+    let current = 0;
     const creep = setInterval(() => {
-      setProgress((prev) => {
-        if (prev >= 85) return prev;
-        return prev + 15;
-      });
-    }, 80);
+      // Slow down as it approaches 80 — feels like real loading
+      const step = current < 40 ? 6 : current < 65 ? 3 : 1;
+      current = Math.min(current + step, 80);
+      setProgress(current);
+      if (current >= 80) clearInterval(creep);
+    }, 120);
 
-    // Complete at 400ms — fast enough to feel snappy
+    // Complete bar after 1.8s
     const finish = setTimeout(() => {
       clearInterval(creep);
       setProgress(100);
+      // Linger at 100% briefly so user sees completion
       setTimeout(() => {
         setVisible(false);
         setProgress(0);
-      }, 200);
-    }, 400);
+      }, 400);
+    }, 1800);
 
     return () => {
       clearInterval(creep);
@@ -45,12 +48,12 @@ const TopProgressBar = () => {
 
   return (
     <div style={{
-      position: 'fixed', top: 0, left: 0,
-      width: `${progress}%`, height: '3px',
-      background: 'linear-gradient(90deg, #2563EB, #60A5FA)',
-      zIndex: 99999,
-      transition: 'width 0.15s ease',
-      boxShadow: '0 0 8px rgba(37,99,235,0.6)',
+      position: 'fixed', top: 0, left: 0, zIndex: 99999,
+      width: `${progress}%`, height: '4px',
+      background: 'linear-gradient(90deg, #1D4ED8, #3B82F6, #60A5FA)',
+      transition: 'width 0.12s ease',
+      boxShadow: '0 0 10px rgba(59,130,246,0.8), 0 0 4px rgba(59,130,246,0.5)',
+      borderRadius: '0 2px 2px 0',
     }} />
   );
 };
