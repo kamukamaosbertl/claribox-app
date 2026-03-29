@@ -45,7 +45,7 @@ export default function SplashScreen({ onDone }) {
         animation: 'splashPop 0.5s cubic-bezier(0.34,1.56,0.64,1) both',
       }}>
         <img
-          src="/Clari.png"
+          src="/f5.png"
           alt="ClariBox"
           style={{ width: '68px', height: '68px', objectFit: 'contain' }}
         />

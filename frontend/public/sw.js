@@ -39,8 +39,8 @@ self.addEventListener('push', (event) => {
   event.waitUntil(
     self.registration.showNotification(data.title, {
       body:    data.body,
-      icon:    '/Clari.png',
-      badge:   '/Clari.png',
+      icon:    '/f5.png',
+      badge:   '/f5.png',
       vibrate: [200, 100, 200],
       data:    { url: data.url || '/' },
     })
