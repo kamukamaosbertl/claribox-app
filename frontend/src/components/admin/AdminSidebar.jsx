@@ -285,7 +285,7 @@ const AdminSidebar = ({ isOpen, onClose }) => {
 
           <button
             onClick={onClose}
-            className="lg:hidden w-7 h-7 rounded-lg bg-white/[0.08] border border-white/10 flex items-center justify-center cursor-pointer text-white/50 transition-all duration-150 shrink-0"
+            className="md:hidden w-7 h-7 rounded-lg bg-white/[0.08] border border-white/10 flex items-center justify-center cursor-pointer text-white/50 transition-all duration-150 shrink-0"
           >
             <X size={13} />
           </button>
@@ -444,13 +444,13 @@ const AdminSidebar = ({ isOpen, onClose }) => {
   return (
     <>
       {/* Desktop — fixed sidebar */}
-      <div className="hidden lg:flex fixed inset-y-0 left-0 z-40">
+      <div className="hidden md:flex fixed inset-y-0 left-0 z-40">
         <SidebarContent />
       </div>
 
       {/* Mobile — slide-in overlay */}
       {isOpen && (
-        <div className="lg:hidden fixed inset-0 z-50">
+        <div className="md:hidden  fixed inset-0 z-50">
           <div
             className="fixed inset-0"
             style={{ background: 'rgba(8,13,24,0.60)' }}

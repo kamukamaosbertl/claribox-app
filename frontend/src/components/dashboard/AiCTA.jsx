@@ -151,7 +151,7 @@ const AiCTA = () => {
           </p>
 
           {/* Feature pills */}
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+          <div style={{ display: 'flex', flexWrap: 'nowrap', gap: '8px', overflowX: 'auto' }}>
             {features.map(({ label, icon: Icon }) => (
               <span
                 key={label}

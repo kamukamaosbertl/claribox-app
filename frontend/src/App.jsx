@@ -1,13 +1,16 @@
 import { BrowserRouter, Routes, Route, Navigate, useLocation, Outlet } from 'react-router-dom';
-import TopProgressBar from './components/TopProgressBar';
+import { useState } from 'react';
+import TopProgressBar   from './components/TopProgressBar';
 
-// Student Pages
+// ── Student Pages ─────────────────────────────────────────────────────────
 import Navbar           from './components/common/Navbar';
 import Footer           from './components/common/Footer';
 import Home             from './pages/student/Home';
 import SubmitFeedback   from './pages/student/SubmitFeedback';
+import SplashScreen     from './components/SplashScreen';
+import Onboarding       from './components/Onboarding';
 
-// Admin Pages
+// ── Admin Pages ───────────────────────────────────────────────────────────
 import AdminLayout      from './components/admin/AdminLayout';
 import Login            from './pages/admin/Login';
 import Dashboard        from './components/dashboard/Dashboard';
@@ -18,7 +21,6 @@ import ChatWithAI       from './pages/admin/ChatWithAI';
 import AllFeedback      from './pages/admin/AllFeedback';
 
 // ── Token validator ───────────────────────────────────────────────────────
-// Checks token exists AND is not expired by decoding the JWT payload
 const getValidToken = () => {
   const token = localStorage.getItem('adminToken');
   if (!token) return null;
@@ -38,8 +40,6 @@ const getValidToken = () => {
 };
 
 // ── Protected route ───────────────────────────────────────────────────────
-// Blocks access if token is missing or expired
-// Saves attempted URL so admin is redirected back after login
 const ProtectedRoute = ({ children }) => {
   const token    = getValidToken();
   const location = useLocation();
@@ -48,7 +48,6 @@ const ProtectedRoute = ({ children }) => {
 };
 
 // ── Public route ──────────────────────────────────────────────────────────
-// Redirects logged-in admin away from login page to dashboard
 const PublicRoute = ({ children }) => {
   const token = getValidToken();
   if (token) return <Navigate to="/admin/dashboard" replace />;
@@ -56,21 +55,36 @@ const PublicRoute = ({ children }) => {
 };
 
 // ── Student layout ────────────────────────────────────────────────────────
-const StudentLayout = () => (
-  <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
-    <Navbar />
-    <main style={{ flex: 1 }}>
-      <Outlet />
-    </main>
-    <Footer />
-  </div>
-);
+// Splash + Onboarding only show when app is installed as a PWA (standalone)
+// In a regular browser the student goes straight to the page
+const StudentLayout = () => {
+  const isInstalled = window.matchMedia('(display-mode: standalone)').matches;
+  const [phase, setPhase] = useState(isInstalled ? 'splash' : 'app');
+
+  if (phase === 'splash') {
+    return <SplashScreen onDone={() => setPhase('onboarding')} />;
+  }
+
+  if (phase === 'onboarding') {
+    return <Onboarding onDone={() => setPhase('app')} />;
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
+      <Navbar />
+      <main style={{ flex: 1 }}>
+        <Outlet />
+      </main>
+      <Footer />
+    </div>
+  );
+};
 
 // ── App ───────────────────────────────────────────────────────────────────
 function App() {
   return (
     <BrowserRouter>
-    <TopProgressBar />
+      <TopProgressBar />
       <Routes>
 
         {/* ── Student routes ── */}
@@ -79,14 +93,14 @@ function App() {
           <Route path="/submit" element={<SubmitFeedback />} />
         </Route>
 
-        {/* ── Admin login — redirect to dashboard if already logged in ── */}
+        {/* ── Admin login ── */}
         <Route path="/admin/login" element={
           <PublicRoute>
             <Login />
           </PublicRoute>
         } />
 
-        {/* ── Admin routes — all protected with valid token check ── */}
+        {/* ── Admin routes ── */}
         <Route path="/admin" element={
           <ProtectedRoute>
             <AdminLayout />
@@ -101,7 +115,7 @@ function App() {
           <Route path="settings"   element={<Settings />} />
         </Route>
 
-        {/* ── Catch all unknown URLs ── */}
+        {/* ── Catch all ── */}
         <Route path="*" element={<Navigate to="/" replace />} />
 
       </Routes>

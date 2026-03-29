@@ -74,7 +74,7 @@ const DashboardHeader = ({
                 </div>
               )}
 
-              <h1 className="m-0 break-words font-sans text-[clamp(18px,3vw,26px)] font-bold leading-[1.25] tracking-[-0.035em] text-[#0F172A]">
+              <h1 className="m-0 font-sans text-[clamp(16px,2vw,22px)] font-bold leading-[1.25] tracking-[-0.035em] text-[#0F172A] whitespace-nowrap overflow-hidden text-ellipsis">
                 {greeting()},{' '}
                 <span className="text-[#2563EB]">
                   {admin?.name?.split(' ')[0] || 'Admin'}

@@ -228,7 +228,7 @@ const AdminLayout = () => {
     <div className="min-h-screen bg-[#F4F7FB] font-inter">
 
       {/* ── Mobile top bar: hamburger + logo only, NO bell ── */}
-      <div id="mobile-topbar" style={{ display: 'none' }}>
+      <div id="mobile-topbar" style={{ display: 'block' }}>
         <div style={{
           display: 'flex',
           alignItems: 'center',
@@ -273,7 +273,7 @@ const AdminLayout = () => {
       <div id="main-content">
 
         {/* ── Desktop header ── */}
-        <header id="desktop-header" style={{ display: 'none' }}>
+        <header id="desktop-header" style={{ display: 'block' }}>
           <div style={{
             display: 'flex',
             alignItems: 'center',
@@ -643,14 +643,14 @@ const AdminLayout = () => {
         }
 
         /* Below 1024px: show mobile bar, hide desktop header, no sidebar margin */
-        @media (max-width: 1023px) {
+        @media (max-width: 767px) {
           #mobile-topbar  { display: block !important; }
           #desktop-header { display: none  !important; }
           #main-content   { margin-left: 0 !important; }
         }
 
         /* 1024px and above: hide mobile bar, show desktop header, sidebar margin */
-        @media (min-width: 1024px) {
+        @media (min-width: 768px) {
           #mobile-topbar  { display: none  !important; }
           #desktop-header { display: block !important; }
           #main-content   { margin-left: 260px; }

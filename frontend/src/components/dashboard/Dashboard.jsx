@@ -149,7 +149,7 @@ const Dashboard = () => {
     >
       {/* Subtle top-of-page accent bar */}
       <div
-        className="h-[3px] sticky top-0 z-50"
+        className="h-[3px] sticky top-0 z-10"
         style={{
           background:
             'linear-gradient(90deg, #2563EB 0%, #3B82F6 60%, #22C55E 100%)',
