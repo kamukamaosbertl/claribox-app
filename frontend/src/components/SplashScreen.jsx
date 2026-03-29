@@ -4,9 +4,8 @@ export default function SplashScreen({ onDone }) {
   const [fading, setFading] = useState(false);
 
   useEffect(() => {
-    // Show splash for 2s then fade out over 0.6s
-    const fadeTimer = setTimeout(() => setFading(true), 2000);
-    const doneTimer = setTimeout(() => onDone(), 2600);
+    const fadeTimer = setTimeout(() => setFading(true), 2200);
+    const doneTimer = setTimeout(() => onDone(), 2800);
     return () => { clearTimeout(fadeTimer); clearTimeout(doneTimer); };
   }, [onDone]);
 
@@ -15,7 +14,7 @@ export default function SplashScreen({ onDone }) {
       position: 'fixed', inset: 0, zIndex: 99999,
       display: 'flex', flexDirection: 'column',
       alignItems: 'center', justifyContent: 'center',
-      background: 'linear-gradient(160deg, #1E40AF 0%, #2563EB 50%, #3B82F6 100%)',
+      background: 'linear-gradient(160deg, #1E3A8A 0%, #1E40AF 50%, #2563EB 100%)',
       opacity: fading ? 0 : 1,
       transition: 'opacity 0.6s ease',
       userSelect: 'none',
@@ -23,37 +22,40 @@ export default function SplashScreen({ onDone }) {
 
       {/* Decorative circles */}
       <div style={{
-        position: 'absolute', top: '-80px', right: '-80px',
-        width: '280px', height: '280px', borderRadius: '50%',
-        background: 'rgba(255,255,255,0.06)',
+        position: 'absolute', top: '-100px', right: '-100px',
+        width: '320px', height: '320px', borderRadius: '50%',
+        background: 'rgba(255,255,255,0.05)', pointerEvents: 'none',
       }} />
       <div style={{
-        position: 'absolute', bottom: '-60px', left: '-60px',
-        width: '220px', height: '220px', borderRadius: '50%',
-        background: 'rgba(255,255,255,0.05)',
+        position: 'absolute', bottom: '-80px', left: '-80px',
+        width: '260px', height: '260px', borderRadius: '50%',
+        background: 'rgba(255,255,255,0.04)', pointerEvents: 'none',
       }} />
 
-      {/* Logo */}
+      {/* Logo container — clean square with padding so icon fits perfectly */}
       <div style={{
-        width: '100px', height: '100px', borderRadius: '28px',
+        width: '112px', height: '112px', borderRadius: '28px',
         background: 'rgba(255,255,255,0.15)',
         backdropFilter: 'blur(12px)',
         border: '1.5px solid rgba(255,255,255,0.25)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        boxShadow: '0 20px 60px rgba(0,0,0,0.20)',
-        marginBottom: '24px',
+        boxShadow: '0 20px 60px rgba(0,0,0,0.25)',
+        marginBottom: '28px', padding: '16px', boxSizing: 'border-box',
         animation: 'splashPop 0.5s cubic-bezier(0.34,1.56,0.64,1) both',
       }}>
         <img
           src="/f5.png"
           alt="ClariBox"
-          style={{ width: '68px', height: '68px', objectFit: 'contain' }}
+          style={{
+            width: '100%', height: '100%',
+            objectFit: 'contain', display: 'block',
+          }}
         />
       </div>
 
       {/* App name */}
       <h1 style={{
-        fontSize: '32px', fontWeight: 900, color: '#FFFFFF',
+        fontSize: '34px', fontWeight: 900, color: '#FFFFFF',
         margin: '0 0 8px', letterSpacing: '-0.04em',
         fontFamily: "'Plus Jakarta Sans', sans-serif",
         animation: 'splashFadeUp 0.5s 0.15s ease both',
@@ -63,8 +65,8 @@ export default function SplashScreen({ onDone }) {
 
       {/* Tagline */}
       <p style={{
-        fontSize: '14px', color: 'rgba(255,255,255,0.75)',
-        margin: '0 0 48px', fontWeight: 500, letterSpacing: '0.01em',
+        fontSize: '14px', color: 'rgba(255,255,255,0.70)',
+        margin: '0 0 52px', fontWeight: 500, letterSpacing: '0.01em',
         fontFamily: "'Plus Jakarta Sans', sans-serif",
         animation: 'splashFadeUp 0.5s 0.25s ease both',
       }}>
@@ -74,9 +76,9 @@ export default function SplashScreen({ onDone }) {
       {/* Spinner */}
       <div style={{
         width: '28px', height: '28px', borderRadius: '50%',
-        border: '3px solid rgba(255,255,255,0.25)',
+        border: '3px solid rgba(255,255,255,0.20)',
         borderTopColor: '#FFFFFF',
-        animation: 'spin 0.8s linear infinite',
+        animation: 'spin 0.9s linear infinite',
       }} />
 
       <style>{`
@@ -84,7 +86,7 @@ export default function SplashScreen({ onDone }) {
           to { transform: rotate(360deg); }
         }
         @keyframes splashPop {
-          from { opacity: 0; transform: scale(0.7); }
+          from { opacity: 0; transform: scale(0.72); }
           to   { opacity: 1; transform: scale(1); }
         }
         @keyframes splashFadeUp {

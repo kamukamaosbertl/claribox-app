@@ -4,8 +4,8 @@
   "description": "Submit your feedback anonymously to help improve your university.",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#ffffff",
-  "theme_color": "#2563EB",
+  "background_color": "#1E40AF",
+  "theme_color": "#1E40AF",
   "orientation": "portrait",
   "scope": "/",
   "icons": [
@@ -13,13 +13,13 @@
       "src": "/f5.png",
       "sizes": "192x192",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
     },
     {
       "src": "/f5.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "maskable"
     }
   ]
 }
