@@ -186,7 +186,11 @@ function quickRelevanceCheck(message, isFollowUp = false) {
     const lower = message.toLowerCase().trim();
     if (ALLOWED_TOPICS.some(t => lower.includes(t))) return true;
     if (/^(what|how|why|which|who|tell|show|give|are|is|can|do|does|any|were|was).{4,}/i.test(lower)) return true;
-    const singleAcknowledgements = ['ok','okay','alright','sure','fine','noted','got it','i see','yep','nope','cool','understood','makes sense','right','k'];
+    const singleAcknowledgements = [
+  'ok','okay','alright','sure','fine','noted','got it','i see',
+  'yep','nope','cool','understood','makes sense','right','k',
+  'good','great','nice','thats good',"that's good",'sounds good'
+];
     if (singleAcknowledgements.includes(lower.trim())) return false;
     const wordCount = lower.split(/\s+/).filter(w => w.length > 1).length;
     if (isFollowUp && wordCount >= 2 && lower.length < 50) return true;
@@ -559,7 +563,11 @@ async function fetchBroadData() {
 }
 
 const CHIT_CHAT_PROMPTS = {
-    greeting:        `The admin just greeted you. Respond warmly and briefly. Let them know you are ready to help them understand student feedback. Keep it to 1-2 sentences.`,
+        get greeting() {
+        const hour = new Date().getHours();
+        const timeOfDay = hour < 12 ? 'morning' : hour < 17 ? 'afternoon' : 'evening';
+        return `Reply in one short sentence. Start with "Good ${timeOfDay}." Then say you are ready to help with student feedback. No extra warmth, no fluff.`;
+    },
     gratitude:       `The admin just thanked you. Respond naturally and briefly. Keep it to 1 sentence.`,
     status:          `The admin asked how you are. Respond in a friendly, light way and redirect to helping with student feedback. Keep it to 1-2 sentences.`,
     identity:        `The admin is asking who you are. Briefly explain that you are an AI feedback analyst for their university suggestion box system. Keep it to 2-3 sentences.`,

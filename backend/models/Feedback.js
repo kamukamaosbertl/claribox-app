@@ -39,10 +39,25 @@ const feedbackSchema = new mongoose.Schema({
   sentiment: {
     type:    String,
     enum:    ['positive', 'neutral', 'negative'],
-    default: null  // null until background processing completes
+    default: null
   },
   sentimentScore: {
     type:    Number,
+    default: null
+  },
+
+  // Emotion detected by Python script — more specific than sentiment
+  // e.g. a negative submission could be "angry" vs "disappointed"
+  emotion: {
+    type:    String,
+    enum:    ['excited', 'satisfied', 'hopeful', 'angry', 'disappointed', 'confused', 'neutral_emotion'],
+    default: null
+  },
+
+  // What triggered the emotion detection
+  // e.g. "phrase_rule", "single_word_rule", or an NRC category like "anger"
+  emotionTrigger: {
+    type:    String,
     default: null
   },
 

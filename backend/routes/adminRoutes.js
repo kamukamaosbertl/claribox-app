@@ -3,15 +3,14 @@ const express    = require('express');
 const router     = express.Router();
 const multer     = require('multer');
 const jwt        = require('jsonwebtoken');
-const cloudinary = require('../config/cloudinary'); // Cloudinary for profile pictures
+const cloudinary = require('../config/cloudinary');
 
 // Models
 const Feedback   = require('../models/Feedback');
 const Admin      = require('../models/Admin');
 const Resolution = require('../models/Resolution');
 
-// ── Multer — memory storage (file goes to Cloudinary not disk) ────────────────
-// We no longer save files locally — they go straight to Cloudinary
+// ── Multer — memory storage ───────────────────────────────────────────────────
 const upload = multer({
   storage: multer.memoryStorage(),
   fileFilter: (req, file, cb) => {
@@ -19,10 +18,10 @@ const upload = multer({
     const valid = allowed.test(file.mimetype) && allowed.test(file.originalname.toLowerCase());
     valid ? cb(null, true) : cb(new Error('Only image files are allowed'));
   },
-  limits: { fileSize: 5 * 1024 * 1024 } // 5MB max
+  limits: { fileSize: 5 * 1024 * 1024 }
 });
 
-// ── Auth middleware — verifies JWT token on every protected route ──────────────
+// ── Auth middleware ───────────────────────────────────────────────────────────
 const auth = (req, res, next) => {
   const token = req.headers.authorization?.split(' ')[1];
   if (!token) return res.status(401).json({ success: false, message: 'No token provided' });
@@ -36,7 +35,7 @@ const auth = (req, res, next) => {
   }
 };
 
-// ── Helper — calculate start date based on filter value ───────────────────────
+// ── Helper — calculate start date based on filter value ──────────────────────
 const getStartDate = (filter) => {
   if (filter === '7days') {
     const d = new Date();
@@ -56,15 +55,12 @@ const getStartDate = (filter) => {
   return null;
 };
 
-// ── Helper — upload buffer to Cloudinary ──────────────────────────────────────
-// Takes a file buffer and uploads it to Cloudinary
-// Returns the secure URL of the uploaded image
+// ── Helper — upload buffer to Cloudinary ─────────────────────────────────────
 const uploadToCloudinary = (buffer, folder) => {
   return new Promise((resolve, reject) => {
     const stream = cloudinary.uploader.upload_stream(
       {
         folder,
-        // Crop and resize to square — good for profile pictures
         transformation: [{ width: 200, height: 200, crop: 'fill', gravity: 'face' }]
       },
       (error, result) => {
@@ -80,21 +76,18 @@ const uploadToCloudinary = (buffer, folder) => {
 // PROFILE ROUTES
 // ============================================================
 
-// GET /api/admin/profile
-// Returns the logged-in admin's profile data
 router.get('/profile', auth, async (req, res) => {
   try {
     const admin = await Admin.findById(req.adminId).select('-password');
     if (!admin) {
       return res.status(404).json({ success: false, message: 'Admin not found' });
     }
-
     res.json({
       success: true,
       data: {
         name:           admin.name,
         email:          admin.email,
-        profilePicture: admin.profilePicture, // Cloudinary URL or Google photo URL
+        profilePicture: admin.profilePicture,
         role:           admin.role
       }
     });
@@ -104,23 +97,16 @@ router.get('/profile', auth, async (req, res) => {
   }
 });
 
-// PUT /api/admin/profile
-// Updates admin name, email, and/or profile picture
-// Profile picture is uploaded to Cloudinary — URL saved in MongoDB
 router.put('/profile', auth, upload.single('profilePicture'), async (req, res) => {
   try {
     const { name, email } = req.body;
     const updateData = {};
 
-    // Only update fields that were actually sent
     if (name)  updateData.name  = name;
     if (email) updateData.email = email;
 
-    // If a new profile picture was uploaded
     if (req.file) {
-      // Upload image buffer to Cloudinary
       const result = await uploadToCloudinary(req.file.buffer, 'admin-profiles');
-      // Save Cloudinary URL to MongoDB — not a local path
       updateData.profilePicture = result.secure_url;
     }
 
@@ -145,66 +131,10 @@ router.put('/profile', auth, upload.single('profilePicture'), async (req, res) =
   }
 });
 
-// PUT /api/admin/notification-prefs
-// Saves admin notification preferences to MongoDB
-// Called when admin clicks Save in Settings → Notifications
-router.put('/notification-prefs', auth, async (req, res) => {
-  try {
-    const { emailWeeklyReport, emailSpikeAlert, emailInactivity } = req.body;
-    const admin = await Admin.findByIdAndUpdate(
-      req.adminId,
-      { notificationPrefs: { emailWeeklyReport, emailSpikeAlert, emailInactivity } },
-      { new: true }
-    ).select('-password');
-    res.json({ success: true, data: admin.notificationPrefs });
-  } catch (error) {
-    res.status(500).json({ success: false, message: 'Server error' });
-  }
-});
-
-// GET /api/admin/notification-prefs
-// Returns current notification preferences
-router.get('/notification-prefs', auth, async (req, res) => {
-  try {
-    const admin = await Admin.findById(req.adminId).select('notificationPrefs');
-    res.json({ success: true, data: admin?.notificationPrefs || {} });
-  } catch (error) {
-    res.status(500).json({ success: false, message: 'Server error' });
-  }
-});
-
-// PUT /api/admin/notification-prefs
-// Saves admin notification preferences to MongoDB
-// Called when admin clicks Save Preferences in Settings page
-router.put('/notification-prefs', auth, async (req, res) => {
-  try {
-    const { emailWeeklyReport, emailSpikeAlert, emailInactivity } = req.body;
-    await Admin.findByIdAndUpdate(req.adminId, {
-      notificationPrefs: { emailWeeklyReport, emailSpikeAlert, emailInactivity }
-    });
-    res.json({ success: true, message: 'Notification preferences saved.' });
-  } catch (error) {
-    res.status(500).json({ success: false, message: 'Server error' });
-  }
-});
-
-// GET /api/admin/notification-prefs
-// Returns admin notification preferences
-router.get('/notification-prefs', auth, async (req, res) => {
-  try {
-    const admin = await Admin.findById(req.adminId).select('notificationPrefs');
-    res.json({ success: true, data: admin.notificationPrefs || {} });
-  } catch (error) {
-    res.status(500).json({ success: false, message: 'Server error' });
-  }
-});
-
 // ============================================================
 // NOTIFICATION PREFERENCES ROUTES
 // ============================================================
 
-// GET /api/admin/notification-prefs
-// Returns saved notification preferences for this admin
 router.get('/notification-prefs', auth, async (req, res) => {
   try {
     const admin = await Admin.findById(req.adminId).select('notificationPrefs');
@@ -221,8 +151,6 @@ router.get('/notification-prefs', auth, async (req, res) => {
   }
 });
 
-// PUT /api/admin/notification-prefs
-// Saves notification preferences to MongoDB
 router.put('/notification-prefs', auth, async (req, res) => {
   try {
     const { emailWeeklyReport, emailSpikeAlert, emailInactivity } = req.body;
@@ -239,15 +167,15 @@ router.put('/notification-prefs', auth, async (req, res) => {
 // FEEDBACK ROUTES
 // ============================================================
 
-// GET /api/admin/feedback — with filters and pagination
 router.get('/feedback', auth, async (req, res) => {
   try {
-    const { category, status, sentiment, sort, limit, page, filter } = req.query;
+    const { category, status, sentiment,emotion , sort, limit, page, filter } = req.query;
     const query = {};
 
     if (category  && category  !== 'all') query.category  = category;
     if (status    && status    !== 'all') query.status    = status;
     if (sentiment && sentiment !== 'all') query.sentiment = sentiment;
+    if (emotion  && emotion  !== 'all') query.emotion  = emotion;
 
     const startDate = getStartDate(filter);
     if (startDate) query.createdAt = { $gte: startDate };
@@ -276,7 +204,6 @@ router.get('/feedback', auth, async (req, res) => {
 });
 
 // GET /api/admin/analytics — dashboard stats with date filtering
-// GET /api/admin/analytics — dashboard stats with date filtering
 router.get('/analytics', auth, async (req, res) => {
   try {
     const { filter } = req.query;
@@ -286,7 +213,6 @@ router.get('/analytics', auth, async (req, res) => {
     console.log('Filter received:', filter);
     console.log('Match query:', matchQuery);
 
-    // Weekly comparison windows
     const thisWeekStart = new Date();
     thisWeekStart.setDate(thisWeekStart.getDate() - 7);
 
@@ -305,22 +231,17 @@ router.get('/analytics', auth, async (req, res) => {
       thisWeekCount,
       lastWeekCount,
       categoryStats,
-      timeStats
+      timeStats,
+      // ── NEW: emotion counts aggregation ──────────────────────
+      emotionStats
     ] = await Promise.all([
       Feedback.countDocuments(matchQuery),
       Feedback.countDocuments({ ...matchQuery, sentiment: 'positive' }),
-      Feedback.countDocuments({ ...matchQuery, sentiment: 'neutral' }),
+      Feedback.countDocuments({ ...matchQuery, sentiment: 'neutral'  }),
       Feedback.countDocuments({ ...matchQuery, sentiment: 'negative' }),
-      Resolution.countDocuments({
-        ...matchQuery,
-        isPublished: true
-      }),
-      Feedback.countDocuments({
-        createdAt: { $gte: thisWeekStart }
-      }),
-      Feedback.countDocuments({
-        createdAt: { $gte: lastWeekStart, $lte: lastWeekEnd }
-      }),
+      Resolution.countDocuments({ ...matchQuery, isPublished: true }),
+      Feedback.countDocuments({ createdAt: { $gte: thisWeekStart } }),
+      Feedback.countDocuments({ createdAt: { $gte: lastWeekStart, $lte: lastWeekEnd } }),
       Feedback.aggregate([
         { $match: matchQuery },
         { $group: { _id: '$category', count: { $sum: 1 } } },
@@ -330,18 +251,39 @@ router.get('/analytics', auth, async (req, res) => {
         { $match: matchQuery },
         {
           $group: {
-            _id: {
-              $dateToString: { format: '%Y-%m-%d', date: '$createdAt' }
-            },
+            _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } },
             feedback: { $sum: 1 }
           }
         },
         { $sort: { _id: 1 } },
         { $limit: 30 }
+      ]),
+      // ── NEW: count each emotion label across all feedback ────
+      // Only counts feedback where emotion is not null
+      Feedback.aggregate([
+        { $match: { ...matchQuery, emotion: { $ne: null } } },
+        { $group: { _id: '$emotion', count: { $sum: 1 } } }
       ])
     ]);
 
     const overallScore = total > 0 ? (positive - negative) / total : 0;
+
+    // ── NEW: convert emotion array to flat object ────────────
+    // e.g. [{ _id: 'angry', count: 4 }] → { angry: 4, ... }
+    const emotions = {
+      excited:         0,
+      satisfied:       0,
+      hopeful:         0,
+      angry:           0,
+      disappointed:    0,
+      confused:        0,
+      neutral_emotion: 0
+    };
+    emotionStats.forEach(e => {
+      if (e._id && emotions.hasOwnProperty(e._id)) {
+        emotions[e._id] = e.count;
+      }
+    });
 
     res.json({
       success: true,
@@ -355,15 +297,16 @@ router.get('/analytics', auth, async (req, res) => {
         positive,
         neutral,
         negative,
-        overallScore: Math.round(overallScore * 100) / 100
+        overallScore: Math.round(overallScore * 100) / 100,
+        emotions      // ← added: emotion breakdown for dashboard chart
       },
       categoryData: categoryStats.map(c => ({
-        name: c._id,
+        name:  c._id,
         count: c.count,
         value: c.count
       })),
       timeData: timeStats.map(t => ({
-        date: t._id,
+        date:     t._id,
         feedback: t.feedback
       }))
     });
@@ -398,69 +341,57 @@ router.get('/stats/time', auth, async (req, res) => {
 });
 
 // GET /api/admin/trends
-// Compares this week vs last week to determine real trend direction
-// trend: 'up' = more feedback this week (problem getting worse)
-// trend: 'down' = less feedback this week (problem improving — resolution working)
-// trend: 'stable' = same as last week
 router.get('/trends', auth, async (req, res) => {
   try {
     const { filter } = req.query;
     const startDate  = getStartDate(filter);
     const matchQuery = startDate ? { createdAt: { $gte: startDate } } : {};
 
-    // This week range
     const thisWeekStart = new Date();
     thisWeekStart.setDate(thisWeekStart.getDate() - 7);
 
-    // Last week range
     const lastWeekStart = new Date();
     lastWeekStart.setDate(lastWeekStart.getDate() - 14);
     const lastWeekEnd = new Date();
     lastWeekEnd.setDate(lastWeekEnd.getDate() - 7);
 
-    // Get overall category counts
-    const trends = await Feedback.aggregate([
+    const trends   = await Feedback.aggregate([
       { $match: matchQuery },
       { $group: { _id: '$category', count: { $sum: 1 } } },
       { $sort: { count: -1 } },
       { $limit: 10 }
     ]);
 
-    // Get this week counts per category
     const thisWeek = await Feedback.aggregate([
       { $match: { createdAt: { $gte: thisWeekStart } } },
       { $group: { _id: '$category', count: { $sum: 1 } } }
     ]);
 
-    // Get last week counts per category
     const lastWeek = await Feedback.aggregate([
       { $match: { createdAt: { $gte: lastWeekStart, $lte: lastWeekEnd } } },
       { $group: { _id: '$category', count: { $sum: 1 } } }
     ]);
 
-    // Build lookup maps for quick access
     const thisWeekMap = {};
     const lastWeekMap = {};
     thisWeek.forEach(t => thisWeekMap[t._id] = t.count);
     lastWeek.forEach(t => lastWeekMap[t._id] = t.count);
 
-    // Determine trend direction per category
     const formatted = trends.map(t => {
       const thisCount = thisWeekMap[t._id] || 0;
       const lastCount = lastWeekMap[t._id] || 0;
 
       let trend = 'stable';
-      if (thisCount > lastCount) trend = 'up';   // more complaints = rising problem
-      if (thisCount < lastCount) trend = 'down'; // fewer complaints = improving
+      if (thisCount > lastCount) trend = 'up';
+      if (thisCount < lastCount) trend = 'down';
 
       return {
-        title:     t._id,
-        count:     t.count,
+        title:    t._id,
+        count:    t.count,
         trend,
-        thisWeek:  thisCount,
-        lastWeek:  lastCount,
-        // Change in number e.g. +3 or -2
-        change:    thisCount - lastCount
+        thisWeek: thisCount,
+        lastWeek: lastCount,
+        change:   thisCount - lastCount
       };
     });
 
@@ -470,7 +401,7 @@ router.get('/trends', auth, async (req, res) => {
   }
 });
 
-// PUT /api/admin/feedback/:id — update feedback status
+// PUT /api/admin/feedback/:id
 router.put('/feedback/:id', auth, async (req, res) => {
   try {
     const { status, admin_notes } = req.body;
@@ -489,7 +420,6 @@ router.put('/feedback/:id', auth, async (req, res) => {
 // RESOLUTION ROUTES
 // ============================================================
 
-// GET /api/admin/resolutions
 router.get('/resolutions', auth, async (req, res) => {
   try {
     const resolutions = await Resolution.find()
@@ -501,7 +431,6 @@ router.get('/resolutions', auth, async (req, res) => {
   }
 });
 
-// POST /api/admin/resolutions
 router.post('/resolutions', auth, async (req, res) => {
   try {
     const { title, description, category, affectedFeedbackIds } = req.body;
@@ -510,8 +439,8 @@ router.post('/resolutions', auth, async (req, res) => {
       description,
       category,
       affectedFeedbackIds: affectedFeedbackIds || [],
-      resolvedBy:  req.adminId,
-      isPublished: true
+      resolvedBy:          req.adminId,
+      isPublished:         true
     });
     await resolution.save();
     res.status(201).json({ success: true, data: resolution });
@@ -520,7 +449,6 @@ router.post('/resolutions', auth, async (req, res) => {
   }
 });
 
-// DELETE /api/admin/resolutions/:id
 router.delete('/resolutions/:id', auth, async (req, res) => {
   try {
     await Resolution.findByIdAndDelete(req.params.id);

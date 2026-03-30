@@ -8,11 +8,6 @@ const { sendSpikeAlert } = require('../services/emailService');
 const { analyzeSentiment } = require('../services/sentimentService');
 const pdfParse   = require('pdf-parse');
 
-// ── NEW: Import Socket.IO emitters and urgency detector ──────────
-// emitNewFeedback  → pushes notification to admin bell in real time
-// emitUrgentAlert  → pushes urgent banner to admin dashboard
-// emitStatsUpdate  → refreshes dashboard counts live
-// detectUrgency    → scans text for dangerous/serious keywords
 const { emitNewFeedback, emitUrgentAlert, emitStatsUpdate } = require('../socket');
 const { detectUrgency } = require('../services/urgencyDetector');
 
@@ -100,10 +95,13 @@ router.post('/submit', upload.single('evidenceFile'), async (req, res) => {
 
         const newFeedback = new Feedback({
             category,
-            feedback:  safeFeedback,
-            summary:   null,
-            sentiment: null,
-            embedding: []
+            feedback:       safeFeedback,
+            summary:        null,
+            sentiment:      null,
+            sentimentScore: null,
+            emotion:        null,        // ← added
+            emotionTrigger: null,        // ← added
+            embedding:      []
         });
 
         await newFeedback.save();
@@ -155,26 +153,29 @@ router.post('/submit', upload.single('evidenceFile'), async (req, res) => {
                     analyzeSentiment(finalText)
                 ]);
 
-                // ── Step 3: Save embedding and sentiment ──────────
+                // ── Step 3: Save embedding, sentiment AND emotion ─
+                // sentimentResult now returns: label, score, emotion, emotion_trigger
                 await Feedback.findByIdAndUpdate(newFeedback._id, {
                     embedding,
                     sentiment:      sentimentResult.label,
-                    sentimentScore: sentimentResult.score
+                    sentimentScore: sentimentResult.score,
+                    emotion:        sentimentResult.emotion        || null, // ← added
+                    emotionTrigger: sentimentResult.emotion_trigger || null  // ← added
                 });
 
-                console.log(`Background processing complete for ${newFeedback.anonymous_id}`);
+                console.log(
+                    `Background processing complete for ${newFeedback.anonymous_id} — ` +
+                    `sentiment: ${sentimentResult.label}, emotion: ${sentimentResult.emotion}`
+                );
 
                 // ── Step 4: Notifications ─────────────────────────
                 const categoryLabel = CATEGORY_LABELS[category] || category;
                 const preview       = safeFeedback.slice(0, 80);
 
-                // Check for urgent keywords FIRST — highest priority
-                // NEW: detectUrgency scans for safety/harassment/health etc.
                 const urgentReason = detectUrgency(safeFeedback);
                 console.log('🚨 Urgency check:', safeFeedback, '→', urgentReason);
 
                 if (urgentReason) {
-                    // Create urgent notification in DB
                     const urgentNotif = await Notification.create({
                         type:     'negative_feedback',
                         title:    `⚠️ Urgent — ${urgentReason}`,
@@ -183,7 +184,6 @@ router.post('/submit', upload.single('evidenceFile'), async (req, res) => {
                         link:     `/admin/feedback?category=${category}&status=pending`
                     });
 
-                    // NEW: Push urgent notification to bell in real time
                     emitNewFeedback({
                         notificationId: urgentNotif._id,
                         type:           urgentNotif.type,
@@ -194,17 +194,14 @@ router.post('/submit', upload.single('evidenceFile'), async (req, res) => {
                         timestamp:      urgentNotif.createdAt
                     });
 
-                    // NEW: Also push urgent banner to dashboard
                     emitUrgentAlert({
                         _id:      newFeedback._id,
                         category: category,
                         feedback: safeFeedback
                     }, urgentReason);
-                    console.log('📡 emitUrgentAlert fired for:', newFeedback._id); 
+                    console.log('📡 emitUrgentAlert fired for:', newFeedback._id);
 
                 } else if (sentimentResult.label === 'negative') {
-                    // Original negative feedback notification — kept exactly as before
-                    // Just added the Socket.IO emit so bell updates live
                     const negNotif = await Notification.create({
                         type:     'negative_feedback',
                         title:    'Negative Feedback Received',
@@ -213,7 +210,6 @@ router.post('/submit', upload.single('evidenceFile'), async (req, res) => {
                         link:     '/admin/dashboard'
                     });
 
-                    // NEW: Push to bell in real time
                     emitNewFeedback({
                         notificationId: negNotif._id,
                         type:           negNotif.type,
@@ -225,8 +221,6 @@ router.post('/submit', upload.single('evidenceFile'), async (req, res) => {
                     });
 
                 } else {
-                    // Positive or neutral — still notify admin but lower priority
-                    // NEW: added this so admin knows about ALL new feedback, not just negative
                     const newNotif = await Notification.create({
                         type:     'new_feedback',
                         title:    `New ${sentimentResult.label} feedback — ${categoryLabel}`,
@@ -235,7 +229,6 @@ router.post('/submit', upload.single('evidenceFile'), async (req, res) => {
                         link:     '/admin/feedback'
                     });
 
-                    // NEW: Push to bell in real time
                     emitNewFeedback({
                         notificationId: newNotif._id,
                         type:           newNotif.type,
@@ -247,7 +240,7 @@ router.post('/submit', upload.single('evidenceFile'), async (req, res) => {
                     });
                 }
 
-                // ── Category spike check — kept exactly as before ─
+                // ── Category spike check ──────────────────────────
                 const todayStart = new Date();
                 todayStart.setHours(0, 0, 0, 0);
                 const todayCount = await Feedback.countDocuments({
@@ -264,7 +257,6 @@ router.post('/submit', upload.single('evidenceFile'), async (req, res) => {
                         link:     '/admin/insights'
                     });
 
-                    // NEW: Push spike notification to bell in real time
                     emitNewFeedback({
                         notificationId: spikeNotif._id,
                         type:           spikeNotif.type,
@@ -280,8 +272,7 @@ router.post('/submit', upload.single('evidenceFile'), async (req, res) => {
                     await sendSpikeAlert(todayCount, category);
                 }
 
-                // NEW: Push updated stats so dashboard counts refresh live
-                // Admin sees total/pending/resolved update without refreshing
+                // Push updated stats so dashboard counts refresh live
                 const [total, pending, resolved] = await Promise.all([
                     Feedback.countDocuments(),
                     Feedback.countDocuments({ status: 'pending' }),

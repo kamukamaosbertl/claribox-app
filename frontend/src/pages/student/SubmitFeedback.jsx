@@ -1,10 +1,12 @@
-import { useState } from 'react';
-import { Send, CheckCircle, AlertCircle, Phone, ArrowLeft, Paperclip, X, Lock, Sparkles } from 'lucide-react';
+import { useState, useRef } from 'react';
+import { Send, CheckCircle, AlertCircle, Phone, ArrowLeft, Paperclip, X, Lock, Sparkles, Mic, MicOff } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { studentAPI } from '../../services/api';
 import ClariCoin from '../../components/dashboard/ClariCoin';
 
 const font = "'Plus Jakarta Sans', 'DM Sans', sans-serif";
+
+
 
 const categories = [
   { value: 'academic',   label: 'Academic & Teaching',    emoji: '📚' },
@@ -42,11 +44,57 @@ const SubmitFeedback = () => {
   const [error,        setError]        = useState('');
   const [focused,      setFocused]      = useState({ category: false, feedback: false });
 
+  const [interimText,  setInterimText]  = useState('');
+  const [isListening,  setIsListening]  = useState(false);
+  const [voiceError,   setVoiceError]   = useState('');
+  const recognitionRef = useRef(null);
+
   const handleFileChange = (e) => {
     const file = e.target.files[0];
     if (file && file.size > 5 * 1024 * 1024) { setError('File is too large. Maximum size is 5MB.'); return; }
     setEvidenceFile(file); setError('');
   };
+
+  const handleVoice = () => {
+  setVoiceError('');
+  if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+    setVoiceError('❌ Your browser does not support voice input. Try Chrome!');
+    return;
+  }
+  if (isListening) {
+    recognitionRef.current?.stop();
+    setIsListening(false);
+    return;
+  }
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const recognition = new SpeechRecognition();
+  recognitionRef.current = recognition;
+  recognition.lang = 'en-US';
+  recognition.continuous = true;
+  recognition.interimResults = true;
+
+  recognition.onstart = () => setIsListening(true);
+
+  recognition.onresult = (event) => {
+    let finalTranscript = '';
+    let interimTranscript = '';
+    for (let i = event.resultIndex; i < event.results.length; i++) {
+      if (event.results[i].isFinal) {
+        finalTranscript += event.results[i][0].transcript;
+      } else {
+        interimTranscript += event.results[i][0].transcript;
+      }
+    }
+    if (finalTranscript) {
+      setFormData(prev => ({ ...prev, feedback: prev.feedback + ' ' + finalTranscript }));
+    }
+    setInterimText(interimTranscript); // live preview
+  };
+
+  recognition.onerror = () => { setIsListening(false); setVoiceError('❌ Voice error. Please try again!'); };
+  recognition.onend  = () => { setIsListening(false); setInterimText(''); };
+  recognition.start();
+};
 
   const handleSubmit = async (e) => {
     e.preventDefault(); setIsSubmitting(true); setError('');
@@ -250,9 +298,32 @@ const SubmitFeedback = () => {
 
             {/* Feedback textarea */}
             <div>
-              <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: '#475569', marginBottom: '7px', textTransform: 'uppercase', letterSpacing: '0.07em' }}>
-                Your Feedback <span style={{ color: '#EF4444' }}>*</span>
-              </label>
+            <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: '#475569', marginBottom: '7px', textTransform: 'uppercase', letterSpacing: '0.07em' }}>
+              Your Feedback <span style={{ color: '#EF4444' }}>*</span>
+              {/* Mic button */}
+              <button
+                type="button" onClick={handleVoice}
+                title={isListening ? 'Stop listening' : 'Speak your feedback'}
+                style={{
+                  marginLeft: '8px', padding: '3px 10px', borderRadius: '99px', border: 'none',
+                  background: isListening ? '#FEE2E2' : '#EFF6FF', cursor: 'pointer',
+                  display: 'inline-flex', alignItems: 'center', gap: '4px',
+                  fontSize: '10px', fontWeight: 700, fontFamily: font,
+                  color: isListening ? '#EF4444' : '#2563EB', transition: 'all 0.15s ease',
+                }}
+              >
+                {isListening ? <MicOff size={11} /> : <Mic size={11} />}
+                {isListening ? 'Stop' : 'Speak'}
+              </button>
+            </label>
+
+            {/* Voice error */}
+            {voiceError && (
+              <p style={{ fontSize: '12px', color: '#EF4444', margin: '0 0 6px' }}>{voiceError}</p>
+            )}
+
+            {/* Textarea — shows committed text + live greyed-out interim preview */}
+            <div style={{ position: 'relative' }}>
               <textarea
                 value={formData.feedback}
                 onChange={(e) => setFormData({ ...formData, feedback: e.target.value })}
@@ -262,13 +333,27 @@ const SubmitFeedback = () => {
                 onFocus={() => setFocused({ ...focused, feedback: true })}
                 onBlur={() => setFocused({ ...focused, feedback: false })}
               />
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '6px' }}>
-                <span style={{ fontSize: '11.5px', color: '#94A3B8' }}>Be specific for best results</span>
-                <span style={{ fontSize: '11.5px', fontWeight: 600, color: formData.feedback.length > 900 ? '#EF4444' : '#94A3B8' }}>
-                  {formData.feedback.length}/1000
-                </span>
-              </div>
+              {/* Interim live text overlay — shown below textarea when speaking */}
+              {interimText && (
+                <div style={{
+                  marginTop: '4px', padding: '8px 12px', borderRadius: '10px',
+                  background: '#F0F7FF', border: '1px dashed #93C5FD',
+                  fontSize: '13px', color: '#94A3B8', fontStyle: 'italic', lineHeight: '1.6',
+                }}>
+                  🎙️ {interimText}
+                </div>
+              )}
             </div>
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '6px' }}>
+              <span style={{ fontSize: '11.5px', color: '#94A3B8' }}>
+                {isListening ? '🔴 Listening...' : 'Be specific for best results'}
+              </span>
+              <span style={{ fontSize: '11.5px', fontWeight: 600, color: formData.feedback.length > 900 ? '#EF4444' : '#94A3B8' }}>
+                {formData.feedback.length}/1000
+              </span>
+            </div>
+          </div>
 
             {/* File upload */}
             <div>

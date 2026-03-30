@@ -26,6 +26,17 @@ const SENTIMENT_COLORS = {
   neutral:  { stroke: '#94A3B8', bg: 'rgba(148,163,184,0.08)',text: '#475569', emoji: '😐', label: 'Neutral'  },
 };
 
+// ── NEW: Emotion definitions (mirrors SentimentAnalysis) ─────────────────
+const EMOTIONS = [
+  { key: 'excited',         label: 'Excited',      emoji: '🤩', color: '#2563EB', bg: 'rgba(37,99,235,0.08)',   text: '#1D4ED8' },
+  { key: 'satisfied',       label: 'Satisfied',    emoji: '😊', color: '#16A34A', bg: 'rgba(22,163,74,0.08)',   text: '#15803D' },
+  { key: 'hopeful',         label: 'Hopeful',      emoji: '🌟', color: '#3B82F6', bg: 'rgba(59,130,246,0.08)',  text: '#1D4ED8' },
+  { key: 'angry',           label: 'Angry',        emoji: '😠', color: '#DC2626', bg: 'rgba(220,38,38,0.08)',   text: '#B91C1C' },
+  { key: 'disappointed',    label: 'Disappointed', emoji: '😔', color: '#EA580C', bg: 'rgba(234,88,12,0.08)',   text: '#C2410C' },
+  { key: 'confused',        label: 'Confused',     emoji: '😕', color: '#D97706', bg: 'rgba(217,119,6,0.08)',   text: '#B45309' },
+  { key: 'neutral_emotion', label: 'Neutral',      emoji: '😐', color: '#64748B', bg: 'rgba(100,116,139,0.08)', text: '#475569' },
+];
+
 const CATEGORIES = ['all', 'academic', 'library', 'it', 'facilities', 'canteen', 'transport', 'hostel', 'admin', 'other'];
 const SENTIMENTS  = ['all', 'positive', 'neutral', 'negative'];
 const PAGE_SIZE   = 10;
@@ -41,6 +52,23 @@ const Pill = ({ color, children }) => (
     {children}
   </span>
 );
+
+// ── Emotion Pill (uses emotion color shape) ───────────────────────────────
+const EmotionPill = ({ emotionKey }) => {
+  const e = EMOTIONS.find(em => em.key === emotionKey);
+  if (!e) return null;
+  return (
+    <span style={{
+      display: 'inline-flex', alignItems: 'center', gap: '5px',
+      background: e.bg,
+      border: `1px solid ${e.color}28`,
+      borderRadius: '20px', padding: '3px 9px',
+      fontSize: '11px', fontWeight: 700, color: e.text, whiteSpace: 'nowrap',
+    }}>
+      {e.emoji} {e.label}
+    </span>
+  );
+};
 
 // ── Modal ─────────────────────────────────────────────────────────────────
 const FeedbackModal = ({ feedback, onClose }) => {
@@ -82,13 +110,15 @@ const FeedbackModal = ({ feedback, onClose }) => {
         </div>
 
         <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          {/* Badges */}
+          {/* Badges — category + sentiment */}
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '7px' }}>
             <Pill color={cat}>
               <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: cat.stroke, flexShrink: 0 }} />
               {feedback.category}
             </Pill>
             <Pill color={sent}>{sent.emoji} {sent.label}</Pill>
+            {/* ── NEW: emotion pill shown only in modal ── */}
+            {feedback.emotion && <EmotionPill emotionKey={feedback.emotion} />}
           </div>
 
           {/* Text */}
@@ -191,6 +221,8 @@ const AllFeedback = () => {
   const [search,     setSearch]     = useState('');
   const [category,   setCategory]   = useState('all');
   const [sentiment,  setSentiment]  = useState('all');
+  // ── NEW: emotion filter state ─────────────────────────────
+  const [emotion,    setEmotion]    = useState('all');
   const [sort,       setSort]       = useState('newest');
   const [showFilter, setShowFilter] = useState(false);
 
@@ -201,6 +233,8 @@ const AllFeedback = () => {
         page, limit: PAGE_SIZE, sort,
         ...(category  !== 'all' && { category  }),
         ...(sentiment !== 'all' && { sentiment }),
+        // ── NEW: pass emotion param to API ────────────────────
+        ...(emotion   !== 'all' && { emotion   }),
       };
       const res  = await adminAPI.getAllFeedback(params);
       const data = res.data;
@@ -218,12 +252,21 @@ const AllFeedback = () => {
       setPages(data.pages || 1);
     } catch { setError('Failed to load feedback. Please try again.'); }
     finally  { setLoading(false); }
-  }, [page, sort, category, sentiment, search]);
+  }, [page, sort, category, sentiment, emotion, search]);
 
   useEffect(() => { fetchFeedback(); }, [fetchFeedback]);
-  useEffect(() => { setPage(1); }, [category, sentiment, sort, search]);
+  // ── NEW: reset page when emotion changes too ──────────────
+  useEffect(() => { setPage(1); }, [category, sentiment, emotion, sort, search]);
 
-  const activeFilters = [category !== 'all', sentiment !== 'all'].filter(Boolean).length;
+  // ── NEW: emotion counts as an active filter ───────────────
+  const activeFilters = [category !== 'all', sentiment !== 'all', emotion !== 'all'].filter(Boolean).length;
+
+  // ── NEW: clear all filters including emotion ──────────────
+  const clearAllFilters = () => {
+    setCategory('all');
+    setSentiment('all');
+    setEmotion('all');
+  };
 
   return (
     <div style={{ fontFamily: font }}>
@@ -325,62 +368,119 @@ const AllFeedback = () => {
 
         {/* Expanded filters */}
         {showFilter && (
-          <div style={{ marginTop: '14px', paddingTop: '14px', borderTop: '1px solid #F1F5F9', display: 'flex', flexWrap: 'wrap', gap: '20px' }}>
-            {/* Category */}
+          <div style={{ marginTop: '14px', paddingTop: '14px', borderTop: '1px solid #F1F5F9', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+
+            {/* Row 1: Category + Sentiment */}
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '20px' }}>
+              {/* Category */}
+              <div>
+                <p style={{ fontSize: '10.5px', fontWeight: 700, color: '#64748B', margin: '0 0 8px', textTransform: 'uppercase', letterSpacing: '0.07em' }}>Category</p>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                  {CATEGORIES.map(cat => (
+                    <button
+                      key={cat}
+                      onClick={() => setCategory(cat)}
+                      style={{
+                        padding: '5px 12px', borderRadius: '20px', cursor: 'pointer',
+                        border: `1px solid ${category === cat ? '#2563EB' : '#E2E8F0'}`,
+                        background: category === cat ? 'linear-gradient(135deg, #2563EB, #1D4ED8)' : '#F8FAFC',
+                        color: category === cat ? '#FFFFFF' : '#475569',
+                        fontSize: '11.5px', fontWeight: 700, fontFamily: font,
+                        textTransform: 'capitalize', transition: 'all 0.14s ease',
+                        boxShadow: category === cat ? '0 3px 8px rgba(37,99,235,0.20)' : 'none',
+                      }}
+                    >
+                      {cat === 'all' ? 'All Categories' : cat}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Sentiment */}
+              <div>
+                <p style={{ fontSize: '10.5px', fontWeight: 700, color: '#64748B', margin: '0 0 8px', textTransform: 'uppercase', letterSpacing: '0.07em' }}>Sentiment</p>
+                <div style={{ display: 'flex', gap: '6px' }}>
+                  {SENTIMENTS.map(s => (
+                    <button
+                      key={s}
+                      onClick={() => setSentiment(s)}
+                      style={{
+                        padding: '5px 12px', borderRadius: '20px', cursor: 'pointer',
+                        border: `1px solid ${sentiment === s ? '#2563EB' : '#E2E8F0'}`,
+                        background: sentiment === s ? 'linear-gradient(135deg, #2563EB, #1D4ED8)' : '#F8FAFC',
+                        color: sentiment === s ? '#FFFFFF' : '#475569',
+                        fontSize: '11.5px', fontWeight: 700, fontFamily: font,
+                        transition: 'all 0.14s ease',
+                        boxShadow: sentiment === s ? '0 3px 8px rgba(37,99,235,0.20)' : 'none',
+                      }}
+                    >
+                      {s === 'all' ? 'All' : s === 'positive' ? '😊 Positive' : s === 'negative' ? '😞 Negative' : '😐 Neutral'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* ── NEW Row 2: Emotion filter ─────────────────────── */}
             <div>
-              <p style={{ fontSize: '10.5px', fontWeight: 700, color: '#64748B', margin: '0 0 8px', textTransform: 'uppercase', letterSpacing: '0.07em' }}>Category</p>
+              <p style={{ fontSize: '10.5px', fontWeight: 700, color: '#64748B', margin: '0 0 8px', textTransform: 'uppercase', letterSpacing: '0.07em' }}>Emotion</p>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                {CATEGORIES.map(cat => (
-                  <button
-                    key={cat}
-                    onClick={() => setCategory(cat)}
-                    style={{
-                      padding: '5px 12px', borderRadius: '20px', cursor: 'pointer',
-                      border: `1px solid ${category === cat ? '#2563EB' : '#E2E8F0'}`,
-                      background: category === cat ? 'linear-gradient(135deg, #2563EB, #1D4ED8)' : '#F8FAFC',
-                      color: category === cat ? '#FFFFFF' : '#475569',
-                      fontSize: '11.5px', fontWeight: 700, fontFamily: font,
-                      textTransform: 'capitalize', transition: 'all 0.14s ease',
-                      boxShadow: category === cat ? '0 3px 8px rgba(37,99,235,0.20)' : 'none',
-                    }}
-                  >
-                    {cat === 'all' ? 'All Categories' : cat}
-                  </button>
-                ))}
+                {/* All emotions button */}
+                <button
+                  onClick={() => setEmotion('all')}
+                  style={{
+                    padding: '5px 12px', borderRadius: '20px', cursor: 'pointer',
+                    border: `1px solid ${emotion === 'all' ? '#2563EB' : '#E2E8F0'}`,
+                    background: emotion === 'all' ? 'linear-gradient(135deg, #2563EB, #1D4ED8)' : '#F8FAFC',
+                    color: emotion === 'all' ? '#FFFFFF' : '#475569',
+                    fontSize: '11.5px', fontWeight: 700, fontFamily: font,
+                    transition: 'all 0.14s ease',
+                    boxShadow: emotion === 'all' ? '0 3px 8px rgba(37,99,235,0.20)' : 'none',
+                  }}
+                >
+                  All Emotions
+                </button>
+
+                {/* Individual emotion buttons — use each emotion's own color when active */}
+                {EMOTIONS.map(e => {
+                  const isActive = emotion === e.key;
+                  return (
+                    <button
+                      key={e.key}
+                      onClick={() => setEmotion(e.key)}
+                      style={{
+                        padding: '5px 12px', borderRadius: '20px', cursor: 'pointer',
+                        border: `1px solid ${isActive ? e.color : '#E2E8F0'}`,
+                        background: isActive ? e.color : '#F8FAFC',
+                        color: isActive ? '#FFFFFF' : '#475569',
+                        fontSize: '11.5px', fontWeight: 700, fontFamily: font,
+                        transition: 'all 0.14s ease',
+                        boxShadow: isActive ? `0 3px 8px ${e.color}33` : 'none',
+                        display: 'inline-flex', alignItems: 'center', gap: '4px',
+                      }}
+                    >
+                      {e.emoji} {e.label}
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
-            {/* Sentiment */}
-            <div>
-              <p style={{ fontSize: '10.5px', fontWeight: 700, color: '#64748B', margin: '0 0 8px', textTransform: 'uppercase', letterSpacing: '0.07em' }}>Sentiment</p>
-              <div style={{ display: 'flex', gap: '6px' }}>
-                {SENTIMENTS.map(s => (
-                  <button
-                    key={s}
-                    onClick={() => setSentiment(s)}
-                    style={{
-                      padding: '5px 12px', borderRadius: '20px', cursor: 'pointer',
-                      border: `1px solid ${sentiment === s ? '#2563EB' : '#E2E8F0'}`,
-                      background: sentiment === s ? 'linear-gradient(135deg, #2563EB, #1D4ED8)' : '#F8FAFC',
-                      color: sentiment === s ? '#FFFFFF' : '#475569',
-                      fontSize: '11.5px', fontWeight: 700, fontFamily: font,
-                      transition: 'all 0.14s ease',
-                      boxShadow: sentiment === s ? '0 3px 8px rgba(37,99,235,0.20)' : 'none',
-                    }}
-                  >
-                    {s === 'all' ? 'All' : s === 'positive' ? '😊 Positive' : s === 'negative' ? '😞 Negative' : '😐 Neutral'}
-                  </button>
-                ))}
-              </div>
-            </div>
-
+            {/* Clear filters */}
             {activeFilters > 0 && (
-              <button
-                onClick={() => { setCategory('all'); setSentiment('all'); }}
-                style={{ alignSelf: 'flex-end', padding: '5px 12px', borderRadius: '20px', border: '1px solid rgba(239,68,68,0.25)', background: 'rgba(239,68,68,0.07)', color: '#B91C1C', fontSize: '11.5px', fontWeight: 700, cursor: 'pointer', fontFamily: font }}
-              >
-                Clear filters
-              </button>
+              <div>
+                <button
+                  onClick={clearAllFilters}
+                  style={{
+                    padding: '5px 12px', borderRadius: '20px',
+                    border: '1px solid rgba(239,68,68,0.25)', background: 'rgba(239,68,68,0.07)',
+                    color: '#B91C1C', fontSize: '11.5px', fontWeight: 700,
+                    cursor: 'pointer', fontFamily: font,
+                  }}
+                >
+                  Clear filters
+                </button>
+              </div>
             )}
           </div>
         )}
@@ -473,7 +573,7 @@ const AllFeedback = () => {
             </p>
             {(search || activeFilters > 0) && (
               <button
-                onClick={() => { setSearch(''); setCategory('all'); setSentiment('all'); }}
+                onClick={() => { setSearch(''); clearAllFilters(); }}
                 style={{ fontSize: '12.5px', fontWeight: 700, color: '#2563EB', background: 'none', border: 'none', cursor: 'pointer', fontFamily: font, marginTop: '4px' }}
               >
                 Clear all filters
