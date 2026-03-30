@@ -17,9 +17,13 @@ import nltk
 nltk.data.path.insert(0, '/opt/render/nltk_data')
 nltk.data.path.insert(0, '/opt/render/project/src/.venv/nltk_data')
 
-for _resource in ['punkt', 'punkt_tab']:
+for _resource, _path in [
+    ('punkt',    'tokenizers/punkt'),
+    ('punkt_tab','tokenizers/punkt_tab'),
+    ('wordnet',  'corpora/wordnet'),
+]:
     try:
-        nltk.data.find(f'tokenizers/{_resource}')
+        nltk.data.find(_path)
     except LookupError:
         nltk.download(_resource, download_dir='/opt/render/nltk_data', quiet=True)
 
