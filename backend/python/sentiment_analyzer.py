@@ -12,8 +12,8 @@ import io
 warnings.filterwarnings('ignore')
 _old_stderr = sys.stderr
 _old_stdout = sys.stdout
-sys.stderr = io.StringIO()
-sys.stdout = io.StringIO()
+#sys.stderr = io.StringIO()
+#sys.stdout = io.StringIO()
 
 import nltk
 nltk.data.path.insert(0, '/opt/render/nltk_data')
