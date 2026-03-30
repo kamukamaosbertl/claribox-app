@@ -11,7 +11,9 @@ import io
 
 warnings.filterwarnings('ignore')
 _old_stderr = sys.stderr
+_old_stdout = sys.stdout
 sys.stderr = io.StringIO()
+sys.stdout = io.StringIO()
 
 import nltk
 nltk.data.path.insert(0, '/opt/render/nltk_data')
@@ -28,6 +30,7 @@ for _resource, _path in [
         nltk.download(_resource, download_dir='/opt/render/nltk_data', quiet=True)
 
 sys.stderr = _old_stderr
+sys.stdout = _old_stdout 
 # ── End Render NLTK fix ──────────────────────────────────────────
 
 import re
@@ -166,8 +169,12 @@ def has_contrast(text_lower):
 
 def detect_emotion(text):
     try:
-        e = NRCLex()
-        e.load_raw_text(text)
+        try:
+            e = NRCLex(text)
+        except TypeError:
+            e = NRCLex('')
+            e.load_raw_text(text)
+        
         freqs = {
             emo: score
             for emo, score in e.affect_frequencies.items()
@@ -256,8 +263,17 @@ def analyze_sentiment(text):
 
 if __name__ == '__main__':
     if not sys.stdin.isatty():
-        text = sys.stdin.read().strip()
-        print(json.dumps(analyze_sentiment(text)))
+        try:
+            text = sys.stdin.read().strip()
+            print(json.dumps(analyze_sentiment(text)))
+        except Exception as e:
+            print(json.dumps({
+                'label': 'neutral',
+                'score': 0.0,
+                'emotion': 'neutral_emotion',
+                'emotion_trigger': None,
+                'error': str(e)
+            }))
         sys.exit(0)
 
     TEST_CASES = [
