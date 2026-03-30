@@ -23,6 +23,7 @@ for _resource, _path in [
     ('punkt',    'tokenizers/punkt'),
     ('punkt_tab','tokenizers/punkt_tab'),
     ('wordnet',  'corpora/wordnet'),
+    ('omw-1.4',  'corpora/omw-1.4'),
 ]:
     try:
         nltk.data.find(_path)
@@ -32,6 +33,13 @@ for _resource, _path in [
 sys.stderr = _old_stderr
 sys.stdout = _old_stdout 
 # ── End Render NLTK fix ──────────────────────────────────────────
+
+# ── Debug — confirm wordnet path at runtime ───────────────────
+import sys as _sys
+_wordnet_path = '/opt/render/nltk_data/corpora/wordnet'
+_wordnet_found = os.path.exists(_wordnet_path)
+print(f"[DEBUG] wordnet found at {_wordnet_path}: {_wordnet_found}", file=_sys.stderr)
+# ── End debug ─────────────────────────────────────────────────
 
 import re
 import json
