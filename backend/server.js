@@ -13,6 +13,7 @@ const http             = require('http');
 const { initSocketIO } = require('./socket');
 
 const app    = express();
+app.set('trust proxy', 1); // ← add this line
 // NEW: Wrap Express in http.Server
 // OLD: const app = express(); app.listen(...)
 // NEW: const server = http.createServer(app); server.listen(...)
