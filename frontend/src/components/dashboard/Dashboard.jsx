@@ -155,6 +155,22 @@ const Dashboard = () => {
             'linear-gradient(90deg, #2563EB 0%, #3B82F6 60%, #22C55E 100%)',
         }}
       />
+      {/* ── Watermark logo ─────────────────────────────────────────────────── */}
+            <div style={{
+              position: 'fixed',
+              top: '50%',
+              left: '50%',
+              transform: 'translate(-50%, -50%)',
+              pointerEvents: 'none',
+              zIndex: 0,
+              opacity: 0.08,
+            }}>
+              <img
+                src="/src/assets/Clari.png"
+                alt=""
+                style={{ width: '520px', height: '520px', objectFit: 'contain' }}
+              />
+            </div>
 
       <div className="max-w-[1280px] mx-auto px-5 py-7">
 

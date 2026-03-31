@@ -41,6 +41,16 @@ const CustomTooltip = ({ active, payload, label }) => {
   );
 };
 
+const EMOTION_CONFIG = {
+  angry:          { emoji: '😡', color: '#EF4444', bg: '#FEF2F2', label: 'Angry'        },
+  disappointed:   { emoji: '😞', color: '#F59E0B', bg: '#FFFBEB', label: 'Disappointed' },
+  confused:       { emoji: '😕', color: '#8B5CF6', bg: '#F5F3FF', label: 'Confused'     },
+  excited:        { emoji: '🤩', color: '#22C55E', bg: '#F0FDF4', label: 'Excited'      },
+  satisfied:      { emoji: '😊', color: '#2563EB', bg: '#EFF6FF', label: 'Satisfied'    },
+  hopeful:        { emoji: '🙏', color: '#06B6D4', bg: '#ECFEFF', label: 'Hopeful'      },
+  neutral_emotion:{ emoji: '😐', color: '#94A3B8', bg: '#F8FAFC', label: 'Neutral'      },
+};
+
 const CategoryInsights = () => {
   const [categoryData, setCategoryData] = useState([]);
   const [loading,      setLoading]      = useState(true);
@@ -233,6 +243,22 @@ const CategoryInsights = () => {
                       <div style={{ height: '100%', width: `${pct}%`, borderRadius: '99px', background: color.stroke, boxShadow: `0 0 5px ${color.stroke}55`, transition: 'width 0.7s cubic-bezier(0.4,0,0.2,1)' }} />
                     </div>
                     <p style={{ fontSize: '10.5px', fontWeight: 700, color: color.text, margin: 0, textAlign: 'right' }}>{pct}% of total</p>
+                    {/* ✅ Add here — inside the map, before the closing </div> of the card */}
+                  {cat.emotions && Object.keys(cat.emotions).length > 0 && (
+                    <div style={{ marginTop: '10px', borderTop: '1px solid #F1F5F9', paddingTop: '10px' }}>
+                      <p style={{ fontSize: '10px', fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.07em', margin: '0 0 7px' }}>Emotions</p>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                        {Object.entries(cat.emotions).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([emotion, count]) => {
+                          const cfg = EMOTION_CONFIG[emotion] || EMOTION_CONFIG.neutral_emotion;
+                          return (
+                            <span key={emotion} style={{ fontSize: '10px', fontWeight: 700, color: cfg.color, background: cfg.bg, border: `1px solid ${cfg.color}28`, borderRadius: '20px', padding: '2px 7px', display: 'flex', alignItems: 'center', gap: '3px' }}>
+                              {cfg.emoji} {cfg.label} · {count}
+                            </span>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
                   </div>
                 );
               })}
@@ -285,7 +311,20 @@ const CategoryInsights = () => {
                         </div>
                         <div style={{ height: '5px', borderRadius: '99px', background: '#F1F5F9', overflow: 'hidden' }}>
                           <div style={{ height: '100%', width: `${pct}%`, borderRadius: '99px', background: color.stroke, boxShadow: `0 0 5px ${color.stroke}55`, transition: 'width 0.7s cubic-bezier(0.4,0,0.2,1)' }} />
+                          
                         </div>
+                        {cat.emotions && (
+                        <div style={{ display: 'flex', gap: '4px', marginTop: '6px', flexWrap: 'wrap' }}>
+                          {Object.entries(cat.emotions).sort((a, b) => b[1] - a[1]).slice(0, 2).map(([emotion, count]) => {
+                            const cfg = EMOTION_CONFIG[emotion] || EMOTION_CONFIG.neutral_emotion;
+                            return (
+                              <span key={emotion} style={{ fontSize: '10px', fontWeight: 600, color: cfg.color, background: cfg.bg, borderRadius: '20px', padding: '2px 7px' }}>
+                               {cfg.emoji} {cfg.label}
+                              </span>
+                            );
+                          })}
+                        </div>
+                      )}
                       </div>
 
                       {/* Pct pill */}

@@ -160,6 +160,14 @@ SENTIMENT AWARENESS:
 - Neutral = observation Students note that X
 - Negative = concern Students are reporting problems with X
 
+EMOTION AWARENESS:
+- angry students = acknowledge urgency first, do not minimise their concern
+- disappointed students = show empathy, note what fell short of expectations  
+- confused students = flag clarity issues, suggest communication improvements
+- excited students = highlight what is working well as a strength
+- hopeful students = note the optimism, treat as constructive feedback
+- satisfied students = flag as positive reinforcement for admin
+
 SOLUTIONS DISCIPLINE:
 - Only give solutions when admin explicitly asks fix improve recommend
 - Analysis questions get analysis only
@@ -181,6 +189,20 @@ WHAT YOU NEVER DO:
 - Never reference entry numbers like Entry 1 Entry 2
 - Never show a NAMED INDIVIDUALS heading in your response
 - Only report what is present in the data never what is absent`;
+
+function isGibberish(message) {
+    const trimmed = message.trim();
+    if (trimmed.length < 3) return true;
+    if (/^[^a-zA-Z0-9]+$/.test(trimmed)) return true;
+    if (/^(.)\1{4,}$/.test(trimmed)) return true;
+    const letters = trimmed.replace(/[^a-zA-Z]/g, '');
+    if (letters.length > 4) {
+        const vowels = letters.match(/[aeiouAEIOU]/g) || [];
+        if (vowels.length / letters.length < 0.1) return true;
+    }
+    if (/[^aeiou\s]{8,}/i.test(trimmed)) return true;
+    return false;
+}
 
 function quickRelevanceCheck(message, isFollowUp = false) {
     const lower = message.toLowerCase().trim();
@@ -351,7 +373,7 @@ function filterResultsByTopic(results, message) {
 
 function buildContext(results) {
     return results.map((doc, i) => {
-        let entry = `[${i+1}] [${doc.category}|${doc.sentiment}] ${doc.feedback}`;
+       let entry = `[${i+1}] [${doc.category}|${doc.sentiment}|${doc.emotion||'neutral_emotion'}] ${doc.feedback}`;
         if (doc.evidenceText) entry += `\n  Evidence: ${doc.evidenceText.slice(0,300)}`;
         const names = extractNames(doc.feedback + (doc.evidenceText || ''));
         if (names.length > 0) entry += `\n  People mentioned: ${names.join(', ')}`;
@@ -378,7 +400,7 @@ function buildNamedPersonsSummary(results) {
     }).join('\n');
 }
 
-function buildPrompt(message, context, dateLabel, categoryLabel, intent='analysis', sentimentSummary=null, namedPersonsSummary=null, resultCount=0) {
+function buildPrompt(message, context, dateLabel, categoryLabel, intent='analysis', sentimentSummary=null,emotionSummary=null, namedPersonsSummary=null, resultCount=0) {
     const scope = [
         categoryLabel ? `Category: ${categoryLabel}` : null,
         dateLabel     ? `Time period: ${dateLabel}`   : null
@@ -394,6 +416,9 @@ function buildPrompt(message, context, dateLabel, categoryLabel, intent='analysi
     const sentimentContext = sentimentSummary
         ? `Sentiment breakdown: ${sentimentSummary}\nFrame response based on sentiment — positive = strength, neutral = observation, negative = concern.`
         : '';
+    const emotionContext = emotionSummary
+        ? `Emotional breakdown: ${emotionSummary}\nConsider the emotional state of students when framing your response — angry students need urgency acknowledged, hopeful students need encouragement, disappointed students need empathy.`
+        : '';
 
     const namedSection = namedPersonsSummary
         ? `\nNAMED INDIVIDUALS IN THIS FEEDBACK:\n${namedPersonsSummary}\n`
@@ -405,6 +430,7 @@ Admin question: "${message}"
 CRITICAL: Only use entries directly relevant to the question. Ignore unrelated entries.
 You have ${resultCount} entries below.
 ${sentimentContext}
+${emotionContext}
 ${namedSection}
 Student Feedback Data:
 ${context}
@@ -482,7 +508,7 @@ async function runVectorSearch(questionEmbedding, detectedCategory, dateRange) {
             ...(detectedCategory && { filter: { category: { $eq: detectedCategory } } })
         }},
         { $addFields: { score: { $meta: 'vectorSearchScore' } } },
-        { $project: { feedback:1, category:1, summary:1, sentiment:1, evidenceText:1, createdAt:1, score:1 } }
+       { $project: { feedback:1, category:1, summary:1, sentiment:1, emotion:1, evidenceText:1, createdAt:1, score:1 } }
     ];
 
     let results = await Feedback.aggregate(pipeline);
@@ -521,7 +547,7 @@ async function runVectorSearch(questionEmbedding, detectedCategory, dateRange) {
         const broadResults = await Feedback.aggregate([
             { $vectorSearch: { index:'feedback_vector_index', queryVector:questionEmbedding, path:'embedding', similarity:'cosine', numCandidates:200, limit:15 } },
             { $addFields: { score: { $meta: 'vectorSearchScore' } } },
-            { $project: { feedback:1, category:1, summary:1, sentiment:1, evidenceText:1, createdAt:1, score:1 } }
+           { $project: { feedback:1, category:1, summary:1, sentiment:1, emotion:1, evidenceText:1, createdAt:1, score:1 } }
         ]);
         return { results: broadResults, usedFallback: true, emptyPeriod: false };
     }
@@ -654,6 +680,7 @@ router.post('/chat', chatRateLimiter, async (req, res) => {
     try {
         const { message, sessionId } = req.body;
         if (!message) return res.status(400).json({ success:false, message:'Message is required.' });
+        if (isGibberish(message)) return res.json({ success:true, answer:"I didn't quite understand that. Try asking something like \"How are students feeling about the canteen?\"" });
 
         const { session, history } = await loadSession(sessionId);
 
@@ -746,6 +773,14 @@ router.post('/chat', chatRateLimiter, async (req, res) => {
         const context             = buildContext(filteredResults);
         const sentimentCounts     = filteredResults.reduce((acc,doc) => { const s=(doc.sentiment||'unknown').toLowerCase(); acc[s]=(acc[s]||0)+1; return acc; }, {});
         const sentimentSummary    = Object.entries(sentimentCounts).map(([s,c])=>`${c} ${s}`).join(', ');
+        const emotionCounts = filteredResults.reduce((acc, doc) => {
+        const e = (doc.emotion || 'neutral_emotion').toLowerCase();
+            acc[e] = (acc[e] || 0) + 1;
+            return acc;
+        }, {});
+        const emotionSummary = Object.entries(emotionCounts)
+            .map(([e, c]) => `${c} ${e}`)
+            .join(', ');
         const namedPersonsSummary = buildNamedPersonsSummary(filteredResults);
 
         if (intent === 'resolved') {
@@ -755,7 +790,7 @@ router.post('/chat', chatRateLimiter, async (req, res) => {
             return res.json({ success:true, answer, intent:'resolved' });
         }
 
-        const prompt = buildPrompt(cleanMessage, context, dateRange?.label, detectedCategory, intent, sentimentSummary, namedPersonsSummary, filteredResults.length);
+        const prompt = buildPrompt(cleanMessage, context, dateRange?.label, detectedCategory, intent, sentimentSummary,emotionSummary, namedPersonsSummary, filteredResults.length);
         const answer = await generateAIResponse(prompt, history);
 
         if (!dateRange) responseCache.set(cacheKey, answer);
@@ -772,7 +807,7 @@ router.post('/chat/stream', chatRateLimiter, async (req, res) => {
     try {
         const { message, sessionId } = req.body;
         if (!message) return res.status(400).json({ success:false, message:'Message is required.' });
-
+    
         res.setHeader('Content-Type',  'text/event-stream');
         res.setHeader('Cache-Control', 'no-cache');
         res.setHeader('Connection',    'keep-alive');
@@ -781,6 +816,7 @@ router.post('/chat/stream', chatRateLimiter, async (req, res) => {
 
         const sendChunk = (data) => res.write(`data: ${JSON.stringify(data)}\n\n`);
         const endStream = () => { res.write(`data: [DONE]\n\n`); res.end(); };
+        if (isGibberish(message)) { sendChunk({ text:"I didn't quite understand that. Try asking something like \"How are students feeling about the canteen or something else about feedback?\"" }); return endStream(); }
 
         const { session, history } = await loadSession(sessionId);
 
@@ -894,6 +930,14 @@ router.post('/chat/stream', chatRateLimiter, async (req, res) => {
         const context             = buildContext(filteredResults);
         const sentimentCounts     = filteredResults.reduce((acc,doc)=>{ const s=(doc.sentiment||'unknown').toLowerCase(); acc[s]=(acc[s]||0)+1; return acc; }, {});
         const sentimentSummary    = Object.entries(sentimentCounts).map(([s,c])=>`${c} ${s}`).join(', ');
+        const emotionCounts = filteredResults.reduce((acc, doc) => {
+        const e = (doc.emotion || 'neutral_emotion').toLowerCase();
+            acc[e] = (acc[e] || 0) + 1;
+            return acc;
+        }, {});
+        const emotionSummary = Object.entries(emotionCounts)
+            .map(([e, c]) => `${c} ${e}`)
+            .join(', ');
         const namedPersonsSummary = buildNamedPersonsSummary(filteredResults);
 
         if (intent === 'resolved') {
@@ -906,7 +950,7 @@ router.post('/chat/stream', chatRateLimiter, async (req, res) => {
             return endStream();
         }
 
-        const prompt = buildPrompt(cleanMessage, context, dateRange?.label, detectedCategory, intent, sentimentSummary, namedPersonsSummary, filteredResults.length);
+        const prompt = buildPrompt(cleanMessage, context, dateRange?.label, detectedCategory, intent, sentimentSummary,emotionSummary, namedPersonsSummary, filteredResults.length);
         const messages = [
             { role:'system', content: SYSTEM_PROMPT },
             ...history.map(h=>([{role:'user',content:h.question},{role:'assistant',content:h.answer}])).flat(),

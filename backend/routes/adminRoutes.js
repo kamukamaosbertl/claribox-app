@@ -243,9 +243,13 @@ router.get('/analytics', auth, async (req, res) => {
       Feedback.countDocuments({ createdAt: { $gte: thisWeekStart } }),
       Feedback.countDocuments({ createdAt: { $gte: lastWeekStart, $lte: lastWeekEnd } }),
       Feedback.aggregate([
-        { $match: matchQuery },
-        { $group: { _id: '$category', count: { $sum: 1 } } },
-        { $sort: { count: -1 } }
+          { $match: matchQuery },
+          { $group: {
+              _id: '$category',
+              count:   { $sum: 1 },
+              emotions: { $push: '$emotion' }
+          }},
+          { $sort: { count: -1 } }
       ]),
       Feedback.aggregate([
         { $match: matchQuery },
@@ -300,11 +304,22 @@ router.get('/analytics', auth, async (req, res) => {
         overallScore: Math.round(overallScore * 100) / 100,
         emotions      // ← added: emotion breakdown for dashboard chart
       },
-      categoryData: categoryStats.map(c => ({
-        name:  c._id,
-        count: c.count,
-        value: c.count
-      })),
+      categoryData: categoryStats.map(c => {
+          const emotionCounts = {};
+          (c.emotions || []).forEach(e => {
+              const key = e || 'neutral_emotion';
+              emotionCounts[key] = (emotionCounts[key] || 0) + 1;
+          });
+          if (Object.keys(emotionCounts).length > 1) {
+              delete emotionCounts['neutral_emotion'];
+          }
+          return {
+              name:     c._id,
+              count:    c.count,
+              value:    c.count,
+              emotions: emotionCounts
+          };
+      }),
       timeData: timeStats.map(t => ({
         date:     t._id,
         feedback: t.feedback
