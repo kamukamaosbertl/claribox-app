@@ -1,4 +1,2 @@
-textblob==0.17.1
-nltk==3.8.1
-nrclex==4.1.0
+
 vaderSentiment==3.3.2

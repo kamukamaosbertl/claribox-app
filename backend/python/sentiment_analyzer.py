@@ -1,65 +1,20 @@
 # backend/python/sentiment_analyzer.py
 # ─────────────────────────────────────────────────────────────────
-# VERSION 3 — VADER + NRCLex (refined + override rules)
+# VERSION 4 — VADER + Keyword Emotion Detection
 # ─────────────────────────────────────────────────────────────────
 
-# ── Render NLTK fix — MUST be first, before any other imports ────
 import os
 import sys
-import warnings
-import io
-
-warnings.filterwarnings('ignore')
-_old_stderr = sys.stderr
-_old_stdout = sys.stdout
-#sys.stderr = io.StringIO()
-#sys.stdout = io.StringIO()
-
-import nltk
-nltk.data.path.insert(0, '/opt/render/nltk_data')
-nltk.data.path.insert(0, '/opt/render/project/src/.venv/nltk_data')
-
-for _resource, _path in [
-    ('punkt',     'tokenizers/punkt'),
-    ('punkt_tab', 'tokenizers/punkt_tab'),
-    ('wordnet',   'corpora/wordnet'),
-    ('omw-1.4',   'corpora/omw-1.4'),
-]:
-    try:
-        nltk.data.find(_path)
-    except (LookupError, OSError):   # ← add OSError here
-        nltk.download(_resource, download_dir='/opt/render/nltk_data', quiet=True)
-
-sys.stderr = _old_stderr
-sys.stdout = _old_stdout 
-# ── End Render NLTK fix ──────────────────────────────────────────
-
-# ── Debug — confirm wordnet path at runtime ───────────────────
-import sys as _sys
-_wordnet_path = '/opt/render/nltk_data/corpora/wordnet'
-_wordnet_found = os.path.exists(_wordnet_path)
-print(f"[DEBUG] wordnet found at {_wordnet_path}: {_wordnet_found}", file=_sys.stderr)
-# ── End debug ─────────────────────────────────────────────────
-
 import re
 import json
+import warnings
+
+warnings.filterwarnings('ignore')
+
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
-from nrclex import NRCLex
 
-# ── Shared analyser instance (avoid re-init on every call) ───────
+# ── Shared analyser instance ─────────────────────────────────────
 _vader = SentimentIntensityAnalyzer()
-
-# ── Emotion map: NRC categories → our system labels ─────────────
-EMOTION_MAP = {
-    'joy':          'excited',
-    'trust':        'satisfied',
-    'anticipation': 'hopeful',
-    'anger':        'angry',
-    'disgust':      'angry',
-    'sadness':      'disappointed',
-    'fear':         'disappointed',
-    'surprise':     'confused'
-}
 
 # ── Contrast words — triggers mixed/neutral override ────────────
 CONTRAST_WORDS = [
@@ -70,42 +25,42 @@ CONTRAST_WORDS = [
 
 # ── Phrase rules ─────────────────────────────────────────────────
 PHRASE_RULES = [
-    (r'\bnot bad\b',             0.30, 'satisfied',      'blend'),
-    (r'\bnot terrible\b',        0.25, 'satisfied',      'blend'),
-    (r'\bnot awful\b',           0.25, 'satisfied',      'blend'),
-    (r'\bnot good\b',           -0.35, 'disappointed',   'override'),
-    (r'\bnot great\b',          -0.30, 'disappointed',   'override'),
-    (r'\bnot helpful\b',        -0.35, 'disappointed',   'override'),
-    (r'\bnot intuitive\b',      -0.40, 'confused',       'override'),
-    (r'\bnot clear\b',          -0.35, 'confused',       'override'),
-    (r'\bnot easy to use\b',    -0.45, 'confused',       'override'),
-    (r'\bnot slow\b',            0.08, 'satisfied',      'override'),
-    (r'\btoo slow\b',            -0.50, 'disappointed',  'override'),
-    (r'\btakes forever\b',       -0.50, 'angry',         'override'),
-    (r'\bnever works\b',         -0.60, 'angry',         'override'),
-    (r'\balways broken\b',       -0.60, 'angry',         'override'),
-    (r'\bnot working\b',         -0.50, 'angry',         'override'),
-    (r'\bkeeps failing\b',       -0.50, 'angry',         'override'),
-    (r'\bcould be better\b',     -0.25, 'disappointed',  'override'),
-    (r'\bexpected more\b',       -0.35, 'disappointed',  'override'),
-    (r'\bwaste of time\b',       -0.60, 'angry',         'override'),
-    (r'\bso confusing\b',        -0.40, 'confused',      'override'),
-    (r'\bhard to use\b',         -0.40, 'confused',      'override'),
-    (r'\bdifficult to use\b',    -0.40, 'confused',      'override'),
-    (r'\bnot sure how to use\b', -0.35, 'confused',      'override'),
-    (r'\bi hate this\b',         -0.70, 'angry',         'override'),
-    (r'\bi hate\b',              -0.65, 'angry',         'override'),
-    (r'\bokay i guess\b',         0.00, 'neutral_emotion', 'override'),
-    (r'\bi hope they improve\b',  0.00, 'hopeful',         'override'),
-    (r'\bhope they improve\b',    0.00, 'hopeful',         'override'),
-    (r'\bcould improve\b',       -0.05, 'hopeful',         'override'),
-    (r'\beasy to use\b',          0.50, 'satisfied',     'blend'),
-    (r'\blove it\b',              0.70, 'excited',       'blend'),
-    (r'\bworks great\b',          0.60, 'satisfied',     'blend'),
-    (r'\bworks perfectly\b',      0.60, 'satisfied',     'blend'),
-    (r'\bhighly recommend\b',     0.70, 'excited',       'blend'),
-    (r'\bgreat experience\b',     0.70, 'excited',       'blend'),
-    (r'\bso helpful\b',           0.60, 'satisfied',     'blend'),
+    (r'\bnot bad\b',             0.30, 'satisfied',        'blend'),
+    (r'\bnot terrible\b',        0.25, 'satisfied',        'blend'),
+    (r'\bnot awful\b',           0.25, 'satisfied',        'blend'),
+    (r'\bnot good\b',           -0.35, 'disappointed',     'override'),
+    (r'\bnot great\b',          -0.30, 'disappointed',     'override'),
+    (r'\bnot helpful\b',        -0.35, 'disappointed',     'override'),
+    (r'\bnot intuitive\b',      -0.40, 'confused',         'override'),
+    (r'\bnot clear\b',          -0.35, 'confused',         'override'),
+    (r'\bnot easy to use\b',    -0.45, 'confused',         'override'),
+    (r'\bnot slow\b',            0.08, 'satisfied',        'override'),
+    (r'\btoo slow\b',           -0.50, 'disappointed',     'override'),
+    (r'\btakes forever\b',      -0.50, 'angry',            'override'),
+    (r'\bnever works\b',        -0.60, 'angry',            'override'),
+    (r'\balways broken\b',      -0.60, 'angry',            'override'),
+    (r'\bnot working\b',        -0.50, 'angry',            'override'),
+    (r'\bkeeps failing\b',      -0.50, 'angry',            'override'),
+    (r'\bcould be better\b',    -0.25, 'disappointed',     'override'),
+    (r'\bexpected more\b',      -0.35, 'disappointed',     'override'),
+    (r'\bwaste of time\b',      -0.60, 'angry',            'override'),
+    (r'\bso confusing\b',       -0.40, 'confused',         'override'),
+    (r'\bhard to use\b',        -0.40, 'confused',         'override'),
+    (r'\bdifficult to use\b',   -0.40, 'confused',         'override'),
+    (r'\bnot sure how to use\b',-0.35, 'confused',         'override'),
+    (r'\bi hate this\b',        -0.70, 'angry',            'override'),
+    (r'\bi hate\b',             -0.65, 'angry',            'override'),
+    (r'\bokay i guess\b',        0.00, 'neutral_emotion',  'override'),
+    (r'\bi hope they improve\b', 0.00, 'hopeful',          'override'),
+    (r'\bhope they improve\b',   0.00, 'hopeful',          'override'),
+    (r'\bcould improve\b',      -0.05, 'hopeful',          'override'),
+    (r'\beasy to use\b',         0.50, 'satisfied',        'blend'),
+    (r'\blove it\b',             0.70, 'excited',          'blend'),
+    (r'\bworks great\b',         0.60, 'satisfied',        'blend'),
+    (r'\bworks perfectly\b',     0.60, 'satisfied',        'blend'),
+    (r'\bhighly recommend\b',    0.70, 'excited',          'blend'),
+    (r'\bgreat experience\b',    0.70, 'excited',          'blend'),
+    (r'\bso helpful\b',          0.60, 'satisfied',        'blend'),
 ]
 
 # ── Single-word rules ────────────────────────────────────────────
@@ -134,15 +89,52 @@ SINGLE_WORD_RULES = {
     'fast':       ( 0.3, 'satisfied'),
 }
 
+# ── Keyword emotion lists ────────────────────────────────────────
+EMOTION_KEYWORDS = {
+    'angry': [
+        'hate', 'rude', 'furious', 'angry', 'never works', 'waste of time',
+        'useless', 'terrible', 'awful', 'broken', 'always late', 'never waits',
+        'so frustrated', 'unacceptable', 'ridiculous', 'outrageous', 'disgusting',
+        'fed up', 'sick of', 'so annoying', 'appalling', 'pathetic',
+    ],
+    'disappointed': [
+        'disappointed', 'expected more', 'could be better', 'poor',
+        'not good', 'not great', 'let down', 'unsatisfied', 'lacking',
+        'difficult', 'slow', 'late', 'unreliable', 'missing', 'substandard',
+        'below average', 'not up to standard', 'underwhelming', 'inadequate',
+    ],
+    'confused': [
+        'confused', 'unclear', 'hard to use', 'difficult to use',
+        'not sure', 'confusing', 'complicated', 'dont understand',
+        "don't understand", 'no idea', 'lost', 'makes no sense',
+        'hard to follow', 'not obvious', 'misleading',
+    ],
+    'excited': [
+        'amazing', 'absolutely amazing', 'excellent', 'love', 'fantastic',
+        'incredible', 'outstanding', 'brilliant', 'best', 'wonderful',
+        'so good', 'highly recommend', 'great experience', 'blown away',
+        'impressive', 'superb', 'exceptional', 'top notch',
+    ],
+    'satisfied': [
+        'good', 'comfortable', 'helpful', 'clean', 'better', 'improved',
+        'fresh', 'affordable', 'nice', 'decent', 'works well', 'happy',
+        'pleased', 'satisfied', 'great', 'well done', 'appreciate',
+        'convenient', 'efficient', 'reliable', 'smooth', 'easy',
+    ],
+    'hopeful': [
+        'hope', 'hopefully', 'wish', 'improve', 'should improve',
+        'looking forward', 'expect improvement', 'would be better',
+        'one day', 'in future', 'soon', 'they should', 'please fix',
+    ],
+}
+
 
 # ═══════════════════════════════════════════════════════════════
 # HELPER FUNCTIONS
 # ═══════════════════════════════════════════════════════════════
 
 def check_phrase_rules(text_lower):
-    matched_scores = []
-    matched_emotions = []
-    matched_modes = []
+    matched_scores, matched_emotions, matched_modes = [], [], []
     for pattern, score, emotion, mode in PHRASE_RULES:
         if re.search(pattern, text_lower):
             matched_scores.append(score)
@@ -176,25 +168,12 @@ def has_contrast(text_lower):
 
 
 def detect_emotion(text):
-    try:
-        try:
-            e = NRCLex(text)
-        except TypeError:
-            e = NRCLex('')
-            e.load_raw_text(text)
-        
-        freqs = {
-            emo: score
-            for emo, score in e.affect_frequencies.items()
-            if emo not in ('positive', 'negative') and score > 0
-        }
-        if not freqs:
-            return 'neutral_emotion', None
-        dominant_nrc = max(freqs, key=freqs.get)
-        mapped_emotion = EMOTION_MAP.get(dominant_nrc, 'neutral_emotion')
-        return mapped_emotion, dominant_nrc
-    except Exception:
-        return 'neutral_emotion', None
+    text_lower = text.lower()
+    for emotion, keywords in EMOTION_KEYWORDS.items():
+        for keyword in keywords:
+            if keyword in text_lower:
+                return emotion, 'keyword'
+    return 'neutral_emotion', None
 
 
 def classify_label(score):
@@ -251,9 +230,7 @@ def analyze_sentiment(text):
         final_emotion = phrase_emotion
         final_trigger = phrase_trigger
     else:
-        nrc_emotion, nrc_trigger = detect_emotion(text)
-        final_emotion = nrc_emotion
-        final_trigger = nrc_trigger
+        final_emotion, final_trigger = detect_emotion(text)
 
     if has_contrast(text_lower) and abs(final_score) < 0.3:
         return build_result(
@@ -266,7 +243,7 @@ def analyze_sentiment(text):
 
 
 # ═══════════════════════════════════════════════════════════════
-# ENTRY POINT — reads from stdin, prints JSON to stdout
+# ENTRY POINT
 # ═══════════════════════════════════════════════════════════════
 
 if __name__ == '__main__':
