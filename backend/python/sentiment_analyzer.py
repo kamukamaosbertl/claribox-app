@@ -96,12 +96,17 @@ EMOTION_KEYWORDS = {
         'useless', 'terrible', 'awful', 'broken', 'always late', 'never waits',
         'so frustrated', 'unacceptable', 'ridiculous', 'outrageous', 'disgusting',
         'fed up', 'sick of', 'so annoying', 'appalling', 'pathetic',
+        'unbearable', 'cockroach', 'no running water', 'not safe',
+        'strangers', 'left open', 'completely dead', 'lost my work',
+        'keeps logging out', 'no notice',
     ],
     'disappointed': [
         'disappointed', 'expected more', 'could be better', 'poor',
         'not good', 'not great', 'let down', 'unsatisfied', 'lacking',
         'difficult', 'slow', 'late', 'unreliable', 'missing', 'substandard',
         'below average', 'not up to standard', 'underwhelming', 'inadequate',
+        'falling behind', 'inconsistent', 'unfair', 'cannot access',
+        'no time to eat', 'long queue', 'cancels class',
     ],
     'confused': [
         'confused', 'unclear', 'hard to use', 'difficult to use',
@@ -114,17 +119,25 @@ EMOTION_KEYWORDS = {
         'incredible', 'outstanding', 'brilliant', 'best', 'wonderful',
         'so good', 'highly recommend', 'great experience', 'blown away',
         'impressive', 'superb', 'exceptional', 'top notch',
+        'variety improved',
     ],
     'satisfied': [
         'good', 'comfortable', 'helpful', 'clean', 'better', 'improved',
         'fresh', 'affordable', 'nice', 'decent', 'works well', 'happy',
         'pleased', 'satisfied', 'great', 'well done', 'appreciate',
         'convenient', 'efficient', 'reliable', 'smooth', 'easy',
+        'explains well', 'very clearly', 'makes time', 
+        'extra help', 'always available', 'approachable',
+        'understanding', 'patient', 'dedicated',
+        'supportive',  'resolved',
+    'within one day', 'very helpful',
     ],
     'hopeful': [
         'hope', 'hopefully', 'wish', 'improve', 'should improve',
         'looking forward', 'expect improvement', 'would be better',
         'one day', 'in future', 'soon', 'they should', 'please fix',
+        'excellent lecturer', 'best lecturer', 'best teacher',
+        'brilliant lecturer', 'highly recommend',
     ],
 }
 
