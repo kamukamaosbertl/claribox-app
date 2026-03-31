@@ -99,6 +99,8 @@ EMOTION_KEYWORDS = {
         'unbearable', 'cockroach', 'no running water', 'not safe',
         'strangers', 'left open', 'completely dead', 'lost my work',
         'keeps logging out', 'no notice',
+        'keeps logging', 'lost my', 'had to start again', 
+        'lost an assignment', 'keeps crashing',
     ],
     'disappointed': [
         'disappointed', 'expected more', 'could be better', 'poor',
