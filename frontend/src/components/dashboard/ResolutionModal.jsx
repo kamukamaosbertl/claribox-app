@@ -1,297 +1,307 @@
-import { useState } from 'react';
-import { X, CheckCircle, Send } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { X, CheckCircle, Send, AlertCircle } from 'lucide-react';
 import { adminAPI } from '../../services/api';
 
-const font = "'Plus Jakarta Sans', 'DM Sans', sans-serif";
-
-const CATEGORIES = [
-  'General', 'Infrastructure', 'Academics',
-  'Services', 'Facilities', 'Technology', 'Other',
-];
-
-const EMPTY_FORM = { title: '', description: '', category: 'General' };
-
-const inputBase = {
-  width: '100%', boxSizing: 'border-box',
-  padding: '10px 14px',
-  borderRadius: '12px',
-  fontSize: '13px', color: '#0F172A', fontFamily: font,
-  outline: 'none',
-  transition: 'border-color 0.15s ease, box-shadow 0.15s ease',
+const getFeedbackCategory = (feedback) => {
+  return (
+    feedback?.topicLabel ||
+    feedback?.topicShortLabel ||
+    feedback?.category ||
+    'General'
+  );
 };
 
-const labelStyle = {
-  display: 'block', fontSize: '11px', fontWeight: 700,
-  color: '#475569', marginBottom: '6px',
-  textTransform: 'uppercase', letterSpacing: '0.06em', fontFamily: font,
-};
+const getInitialForm = (feedback) => ({
+  title: '',
+  description: '',
+  category: getFeedbackCategory(feedback),
+});
 
-const ResolutionModal = ({ isOpen, onClose, onSuccess }) => {
+const ResolutionModal = ({
+  isOpen,
+  onClose,
+  onSuccess,
+  feedback,
+  categories = [],
+}) => {
+  const [formData, setFormData] = useState(() => getInitialForm(feedback));
+  const [loading, setLoading] = useState(false);
+  const [errors, setErrors] = useState({});
+  const [submitError, setSubmitError] = useState('');
+
+  const availableCategories = useMemo(() => {
+    return Array.from(
+      new Set([
+        getFeedbackCategory(feedback),
+        ...categories,
+        'General',
+      ].filter(Boolean))
+    );
+  }, [feedback, categories]);
+
+  useEffect(() => {
+    if (isOpen) {
+      setFormData(getInitialForm(feedback));
+      setErrors({});
+      setSubmitError('');
+    }
+  }, [isOpen, feedback]);
+
   if (!isOpen) return null;
 
-  const [formData, setFormData] = useState(EMPTY_FORM);
-  const [loading,  setLoading]  = useState(false);
-  const [errors,   setErrors]   = useState({});
-
   const validate = () => {
-    const e = {};
-    if (!formData.title.trim())            e.title = 'Title is required';
-    if (formData.title.length > 100)       e.title = 'Max 100 characters';
-    if (!formData.description.trim())      e.description = 'Description is required';
-    if (formData.description.length > 500) e.description = 'Max 500 characters';
-    setErrors(e);
-    return Object.keys(e).length === 0;
+    const nextErrors = {};
+
+    if (!formData.title.trim()) {
+      nextErrors.title = 'Title is required';
+    } else if (formData.title.length > 100) {
+      nextErrors.title = 'Max 100 characters';
+    }
+
+    if (!formData.description.trim()) {
+      nextErrors.description = 'Description is required';
+    } else if (formData.description.length > 500) {
+      nextErrors.description = 'Max 500 characters';
+    }
+
+    setErrors(nextErrors);
+    return Object.keys(nextErrors).length === 0;
   };
 
-  const handleSubmit = async (ev) => {
-    ev.preventDefault();
+  const handleChange = (field, value) => {
+    setFormData((current) => ({
+      ...current,
+      [field]: value,
+    }));
+
+    setErrors((current) => ({
+      ...current,
+      [field]: '',
+    }));
+
+    setSubmitError('');
+  };
+
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+
     if (!validate()) return;
+
     setLoading(true);
+    setSubmitError('');
+
     try {
-      await adminAPI.createResolution(formData);
-      setFormData(EMPTY_FORM);
-      setErrors({});
-      onSuccess();
-      onClose();
-    } catch (err) {
-      console.error('Error creating resolution:', err);
-      alert('Failed to create resolution. Please try again.');
+      await adminAPI.createResolution({
+        title: formData.title.trim(),
+        description: formData.description.trim(),
+        category: formData.category,
+        affectedFeedbackIds: feedback?._id ? [feedback._id] : [],
+      });
+
+      onSuccess?.();
+      onClose?.();
+    } catch (error) {
+      console.error('Error creating resolution:', error);
+      setSubmitError('Failed to create resolution. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
-  const isFormEmpty = !formData.title.trim() && !formData.description.trim();
-  const isDisabled  = loading || isFormEmpty;
+  const isDisabled =
+    loading ||
+    !formData.title.trim() ||
+    !formData.description.trim();
 
   return (
-    <div style={{
-      position: 'fixed', inset: 0, zIndex: 50,
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      fontFamily: font,
-    }}>
-      {/* Backdrop */}
+    <div className="fixed inset-0 z-50 flex items-center justify-center px-4 font-sans">
       <div
-        onClick={onClose}
-        style={{
-          position: 'absolute', inset: 0,
-          background: 'rgba(15,23,42,0.50)',
-          backdropFilter: 'blur(4px)',
-        }}
+        className="absolute inset-0 bg-slate-950/50 backdrop-blur-sm"
+        onClick={loading ? undefined : onClose}
       />
 
-      {/* Modal card */}
-      <div style={{
-        position: 'relative',
-        width: '100%', maxWidth: '480px',
-        margin: '0 16px',
-        background: '#FFFFFF',
-        borderRadius: '22px',
-        boxShadow: '0 24px 64px rgba(15,23,42,0.18)',
-        overflow: 'hidden',
-        animation: 'modalIn 0.2s ease',
-        maxHeight: '92vh', overflowY: 'auto',
-      }}>
+      <div className="relative max-h-[92vh] w-full max-w-[520px] overflow-y-auto rounded-[24px] bg-white shadow-[0_24px_64px_rgba(15,23,42,0.20)]">
+        <div className="relative overflow-hidden bg-gradient-to-br from-emerald-900 via-emerald-600 to-emerald-700 px-6 py-5 text-white">
+          <div className="absolute -right-8 -top-8 h-28 w-28 rounded-full bg-white/10" />
 
-        {/* ── Header ────────────────────────────────────────── */}
-        <div style={{
-          position: 'relative', overflow: 'hidden',
-          background: 'linear-gradient(135deg, #064E3B 0%, #059669 55%, #047857 100%)',
-          padding: '20px 22px',
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        }}>
-          {/* Blob */}
-          <div style={{
-            position: 'absolute', top: '-20px', right: '-20px',
-            width: '90px', height: '90px', borderRadius: '50%',
-            background: 'rgba(255,255,255,0.08)', pointerEvents: 'none',
-          }} />
-          {/* Grid */}
-          <div style={{
-            position: 'absolute', inset: 0, pointerEvents: 'none',
-            backgroundImage: 'linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px)',
-            backgroundSize: '28px 28px',
-          }} />
+          <div className="relative flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-white/20 bg-white/15">
+                <CheckCircle size={20} />
+              </div>
 
-          <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <div style={{
-              width: '40px', height: '40px', borderRadius: '11px',
-              background: 'rgba(255,255,255,0.15)',
-              border: '1px solid rgba(255,255,255,0.2)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.12)',
-            }}>
-              <CheckCircle size={19} color="#FFFFFF" />
+              <div>
+                <h2 className="text-base font-black tracking-[-0.03em]">
+                  Add Resolution
+                </h2>
+                <p className="mt-1 text-xs text-white/70">
+                  Document how this feedback issue was handled.
+                </p>
+              </div>
             </div>
-            <div>
-              <h2 style={{ fontSize: '14px', fontWeight: 800, color: '#FFFFFF', margin: '0 0 2px', letterSpacing: '-0.02em' }}>
-                Add Resolution
-              </h2>
-              <p style={{ fontSize: '11px', color: 'rgba(255,255,255,0.60)', margin: 0, fontWeight: 500 }}>
-                Document how you resolved the issue
-              </p>
-            </div>
+
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={loading}
+              className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/20 bg-white/15 transition hover:bg-white/25 disabled:cursor-not-allowed disabled:opacity-50"
+              aria-label="Close resolution modal"
+            >
+              <X size={16} />
+            </button>
           </div>
-
-          <button
-            onClick={onClose}
-            style={{
-              position: 'relative',
-              width: '32px', height: '32px', borderRadius: '9px',
-              background: 'rgba(255,255,255,0.14)',
-              border: '1px solid rgba(255,255,255,0.2)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              cursor: 'pointer', color: '#FFFFFF',
-              transition: 'background 0.15s ease',
-            }}
-            onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.22)'; }}
-            onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.14)'; }}
-          >
-            <X size={15} />
-          </button>
         </div>
 
-        {/* ── Form ──────────────────────────────────────────── */}
-        <form onSubmit={handleSubmit} style={{ padding: '22px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        <form onSubmit={handleSubmit} className="space-y-5 p-6">
+          {feedback && (
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <p className="text-[11px] font-black uppercase tracking-[0.12em] text-slate-400">
+                Resolving feedback
+              </p>
 
-          {/* Title */}
+              <p className="mt-2 line-clamp-3 text-sm leading-relaxed text-slate-700">
+                {feedback.feedback || feedback.text || 'Selected feedback item'}
+              </p>
+            </div>
+          )}
+
+          {submitError && (
+            <div className="flex items-start gap-2 rounded-2xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+              <AlertCircle size={16} className="mt-0.5 shrink-0" />
+              <span>{submitError}</span>
+            </div>
+          )}
+
           <div>
-            <label style={labelStyle}>Resolution Title</label>
+            <label className="mb-2 block text-[11px] font-black uppercase tracking-[0.08em] text-slate-600">
+              Resolution Title
+            </label>
+
             <input
               type="text"
               value={formData.title}
-              onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-              placeholder="e.g., Fixed WiFi issues in Library"
-              style={{
-                ...inputBase,
-                border: `1px solid ${errors.title ? '#FECACA' : '#E2E8F0'}`,
-                background: errors.title ? '#FEF2F2' : '#FFFFFF',
-              }}
-              onFocus={(e) => { if (!errors.title) { e.target.style.borderColor = '#93C5FD'; e.target.style.boxShadow = '0 0 0 3px rgba(37,99,235,0.08)'; } }}
-              onBlur={(e)  => { e.target.style.borderColor = errors.title ? '#FECACA' : '#E2E8F0'; e.target.style.boxShadow = 'none'; }}
+              onChange={(event) => handleChange('title', event.target.value)}
+              placeholder="e.g., Fixed WiFi issues in the library"
+              maxLength={100}
+              disabled={loading}
+              className={`
+                w-full rounded-2xl border px-4 py-3 text-sm text-slate-950 outline-none transition
+                focus:border-blue-300 focus:ring-4 focus:ring-blue-100
+                disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400
+                ${
+                  errors.title
+                    ? 'border-red-300 bg-red-50'
+                    : 'border-slate-200 bg-white'
+                }
+              `}
             />
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '5px' }}>
-              {errors.title
-                ? <span style={{ fontSize: '11px', color: '#EF4444', fontWeight: 600 }}>{errors.title}</span>
-                : <span />
-              }
-              <span style={{ fontSize: '11px', color: '#CBD5E1', marginLeft: 'auto' }}>
+
+            <div className="mt-1 flex justify-between gap-3 text-xs">
+              <span className="font-semibold text-red-500">
+                {errors.title || ''}
+              </span>
+              <span className="text-slate-400">
                 {formData.title.length}/100
               </span>
             </div>
           </div>
 
-          {/* Description */}
           <div>
-            <label style={labelStyle}>Description</label>
+            <label className="mb-2 block text-[11px] font-black uppercase tracking-[0.08em] text-slate-600">
+              Description
+            </label>
+
             <textarea
               value={formData.description}
-              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+              onChange={(event) => handleChange('description', event.target.value)}
               placeholder="Describe what was done to resolve this issue..."
               rows={4}
-              style={{
-                ...inputBase,
-                border: `1px solid ${errors.description ? '#FECACA' : '#E2E8F0'}`,
-                background: errors.description ? '#FEF2F2' : '#FFFFFF',
-                resize: 'none', lineHeight: '1.55',
-              }}
-              onFocus={(e) => { if (!errors.description) { e.target.style.borderColor = '#93C5FD'; e.target.style.boxShadow = '0 0 0 3px rgba(37,99,235,0.08)'; } }}
-              onBlur={(e)  => { e.target.style.borderColor = errors.description ? '#FECACA' : '#E2E8F0'; e.target.style.boxShadow = 'none'; }}
+              maxLength={500}
+              disabled={loading}
+              className={`
+                w-full resize-none rounded-2xl border px-4 py-3 text-sm leading-relaxed text-slate-950 outline-none transition
+                focus:border-blue-300 focus:ring-4 focus:ring-blue-100
+                disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400
+                ${
+                  errors.description
+                    ? 'border-red-300 bg-red-50'
+                    : 'border-slate-200 bg-white'
+                }
+              `}
             />
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '5px' }}>
-              {errors.description
-                ? <span style={{ fontSize: '11px', color: '#EF4444', fontWeight: 600 }}>{errors.description}</span>
-                : <span />
-              }
-              <span style={{ fontSize: '11px', color: '#CBD5E1', marginLeft: 'auto' }}>
+
+            <div className="mt-1 flex justify-between gap-3 text-xs">
+              <span className="font-semibold text-red-500">
+                {errors.description || ''}
+              </span>
+              <span className="text-slate-400">
                 {formData.description.length}/500
               </span>
             </div>
           </div>
 
-          {/* Category */}
           <div>
-            <label style={labelStyle}>Category</label>
+            <label className="mb-2 block text-[11px] font-black uppercase tracking-[0.08em] text-slate-600">
+              Category
+            </label>
+
             <select
               value={formData.category}
-              onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-              style={{ ...inputBase, border: '1px solid #E2E8F0', background: '#FFFFFF' }}
-              onFocus={(e) => { e.target.style.borderColor = '#93C5FD'; e.target.style.boxShadow = '0 0 0 3px rgba(37,99,235,0.08)'; }}
-              onBlur={(e)  => { e.target.style.borderColor = '#E2E8F0'; e.target.style.boxShadow = 'none'; }}
+              onChange={(event) => handleChange('category', event.target.value)}
+              disabled={loading}
+              className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-950 outline-none transition focus:border-blue-300 focus:ring-4 focus:ring-blue-100 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400"
             >
-              {CATEGORIES.map((cat) => (
-                <option key={cat} value={cat}>{cat}</option>
+              {availableCategories.map((category) => (
+                <option key={category} value={category}>
+                  {category}
+                </option>
               ))}
             </select>
+
+            <p className="mt-2 text-xs text-slate-400">
+              Category is pulled from the selected feedback when available.
+            </p>
           </div>
 
-          {/* Divider */}
-          <div style={{ height: '1px', background: '#F1F5F9' }} />
+          <div className="border-t border-slate-100 pt-5">
+            <div className="flex gap-3">
+              <button
+                type="submit"
+                disabled={isDisabled}
+                className={`
+                  flex flex-1 items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-black text-white transition
+                  ${
+                    isDisabled
+                      ? 'cursor-not-allowed bg-blue-300'
+                      : 'bg-blue-600 hover:bg-blue-700 hover:shadow-[0_10px_24px_rgba(37,99,235,0.28)]'
+                  }
+                `}
+              >
+                {loading ? (
+                  <>
+                    <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />
+                    Saving...
+                  </>
+                ) : (
+                  <>
+                    <Send size={15} />
+                    Publish Resolution
+                  </>
+                )}
+              </button>
 
-          {/* Action buttons */}
-          <div style={{ display: 'flex', gap: '10px' }}>
-            <button
-              type="submit"
-              disabled={isDisabled}
-              style={{
-                flex: 1,
-                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '7px',
-                padding: '11px',
-                borderRadius: '12px', border: 'none',
-                background: isDisabled
-                  ? '#93C5FD'
-                  : 'linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%)',
-                color: '#FFFFFF', fontSize: '13px', fontWeight: 800,
-                cursor: isDisabled ? 'not-allowed' : 'pointer', fontFamily: font,
-                boxShadow: isDisabled ? 'none' : '0 4px 14px rgba(37,99,235,0.24)',
-                letterSpacing: '-0.01em',
-                transition: 'all 0.16s ease',
-              }}
-              onMouseEnter={(e) => { if (!isDisabled) { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 8px 20px rgba(37,99,235,0.30)'; } }}
-              onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = isDisabled ? 'none' : '0 4px 14px rgba(37,99,235,0.24)'; }}
-            >
-              {loading ? (
-                <>
-                  <div style={{
-                    width: '13px', height: '13px', borderRadius: '50%',
-                    border: '2px solid rgba(255,255,255,0.35)',
-                    borderTopColor: '#FFFFFF',
-                    animation: 'spin 0.8s linear infinite',
-                  }} />
-                  Saving…
-                </>
-              ) : (
-                <><Send size={13} /> Publish Resolution</>
-              )}
-            </button>
-
-            <button
-              type="button" onClick={onClose}
-              style={{
-                padding: '11px 20px',
-                borderRadius: '12px',
-                border: '1px solid #E2E8F0',
-                background: '#FFFFFF', color: '#475569',
-                fontSize: '13px', fontWeight: 600,
-                cursor: 'pointer', fontFamily: font,
-                transition: 'all 0.15s ease',
-              }}
-              onMouseEnter={(e) => { e.currentTarget.style.background = '#F8FAFC'; e.currentTarget.style.borderColor = '#CBD5E1'; }}
-              onMouseLeave={(e) => { e.currentTarget.style.background = '#FFFFFF'; e.currentTarget.style.borderColor = '#E2E8F0'; }}
-            >
-              Cancel
-            </button>
+              <button
+                type="button"
+                onClick={onClose}
+                disabled={loading}
+                className="rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-bold text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Cancel
+              </button>
+            </div>
           </div>
         </form>
       </div>
-
-      <style>{`
-        @keyframes modalIn {
-          from { opacity: 0; transform: scale(0.96) translateY(12px); }
-          to   { opacity: 1; transform: scale(1)    translateY(0);    }
-        }
-        @keyframes spin { to { transform: rotate(360deg); } }
-      `}</style>
     </div>
   );
 };

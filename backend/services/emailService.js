@@ -2,10 +2,12 @@
 // Handles all email sending for ClariBox using Resend
 // Checks admin notification preferences before sending each email type
 // If a toggle is OFF in Settings → that email type is skipped
-
+/*
 const { Resend } = require('resend');
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL;
-const resend      = new Resend(process.env.RESEND_API_KEY);
+const resend = process.env.RESEND_API_KEY
+  ? new Resend(process.env.RESEND_API_KEY)
+  : null;
 const CLIENT_URL  = process.env.CLIENT_URL || 'http://localhost:5173';
 
 // ── Get admin notification preferences from MongoDB ───────────────────────────
@@ -278,4 +280,9 @@ async function sendSecurityAlert(adminName, changeType) {
     }
 }
 
-module.exports = { sendWeeklyReport, sendInactivityReminder, sendSpikeAlert, sendSecurityAlert };
+module.exports = { sendWeeklyReport, sendInactivityReminder, sendSpikeAlert, sendSecurityAlert }; */module.exports = {
+  sendWeeklyReport: async () => {},
+  sendInactivityReminder: async () => {},
+  sendSpikeAlert: async () => {},
+  sendSecurityAlert: async () => {}
+};

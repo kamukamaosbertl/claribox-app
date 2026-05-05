@@ -1,297 +1,417 @@
-const express    = require('express');
-const router     = express.Router();
-const multer     = require('multer');
-const cloudinary = require('../config/cloudinary');
-const Feedback     = require('../models/Feedback');
-const Notification           = require('../models/Notification');
+
+const express = require('express');
+const router = express.Router();
+
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
+const axios = require('axios');
+
+
+const Feedback = require('../models/Feedback');
+const Notification = require('../models/Notification');
+
 const { sendSpikeAlert } = require('../services/emailService');
 const { analyzeSentiment } = require('../services/sentimentService');
-const pdfParse   = require('pdf-parse');
-
-const { emitNewFeedback, emitUrgentAlert, emitStatsUpdate } = require('../socket');
+const { assignThemeGroup } = require('../services/themeGrouper');
 const { detectUrgency } = require('../services/urgencyDetector');
+const { indexFeedbackForRAG } = require('../services/ragIndexer');
+const { processFeedbackJob } = require('../services/processFeedbackJob');
 
-// ── Multer — memory storage ───────────────────────────────────────────────────
-const upload = multer({
-    storage: multer.memoryStorage(),
-    limits: { fileSize: 5 * 1024 * 1024 }
+const pdfParse = require('pdf-parse');
+const Tesseract = require('tesseract.js');
+
+const {
+  emitNewFeedback,
+  emitUrgentAlert,
+  emitStatsUpdate
+} = require('../socket');
+
+// ============================================================
+// UPLOAD FOLDER SETUP
+// ============================================================
+
+const uploadDirs = ['uploads/images', 'uploads/pdfs'];
+
+uploadDirs.forEach((dir) => {
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
 });
 
+// ============================================================
+// MULTER STORAGE CONFIGURATION
+// ============================================================
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const isPdf = path.extname(file.originalname).toLowerCase() === '.pdf';
+    cb(null, isPdf ? 'uploads/pdfs' : 'uploads/images');
+  },
+
+  filename: (req, file, cb) => {
+    const safeOriginalName = file.originalname.replace(/\s+/g, '-');
+    const uniqueName = `${Date.now()}-${safeOriginalName}`;
+    cb(null, uniqueName);
+  }
+});
+
+// ============================================================
+// FILE TYPE VALIDATION
+// ============================================================
+
+const fileFilter = (req, file, cb) => {
+  const allowedExtensions = ['.jpg', '.jpeg', '.png', '.pdf'];
+  const ext = path.extname(file.originalname).toLowerCase();
+
+  if (!allowedExtensions.includes(ext)) {
+    return cb(new Error('Only JPG, PNG, and PDF files are allowed'));
+  }
+
+  cb(null, true);
+};
+
+// ============================================================
+// MULTER UPLOAD INSTANCE
+// ============================================================
+
+const upload = multer({
+  storage,
+  fileFilter,
+  limits: { fileSize: 5 * 1024 * 1024 }
+});
+
+// ============================================================
+// CONSTANTS
+// ============================================================
+
+const MAX_FEEDBACK_LENGTH = 1000;
 const MAX_TEXT_LENGTH = 4000;
 
-// ── Local embedding pipeline ──────────────────────────────────────────────────
-let embeddingPipeline = null;
+const EMPTY_EVIDENCE_FILE = {
+  url: null,
+  fileName: null,
+  fileType: null
+};
 
-async function getEmbeddingPipeline() {
-    if (!embeddingPipeline) {
-        console.log('Loading local embedding model...');
-        const { pipeline } = await import('@xenova/transformers');
-        embeddingPipeline = await pipeline(
-            'feature-extraction',
-            'Xenova/all-MiniLM-L6-v2'
-        );
-        console.log('Embedding model ready ✅');
-    }
-    return embeddingPipeline;
+// ============================================================
+// TEXT EXTRACTION HELPERS
+// ============================================================
+
+async function extractTextFromPDF(filePath) {
+  try {
+    const buffer = fs.readFileSync(filePath);
+    const pdfData = await pdfParse(buffer);
+    return (pdfData.text || '').trim();
+  } catch (err) {
+    console.error('PDF extraction error:', err.message);
+    return '';
+  }
 }
 
-/* ---------------- HELPER FUNCTIONS ---------------- */
-
-async function generateEmbedding(text) {
-    try {
-        const safeText = text.slice(0, MAX_TEXT_LENGTH);
-        const pipe     = await getEmbeddingPipeline();
-        const output   = await pipe(safeText, { pooling: 'mean', normalize: true });
-        return Array.from(output.data);
-    } catch (error) {
-        console.error('Embedding error:', error.message);
-        return [];
-    }
+async function extractTextFromImage(filePath) {
+  try {
+    const result = await Tesseract.recognize(filePath, 'eng');
+    return (result.data.text || '').trim();
+  } catch (err) {
+    console.error('OCR error:', err.message);
+    return '';
+  }
 }
 
-const streamUpload = (buffer) => {
-    return new Promise((resolve, reject) => {
-        const stream = cloudinary.uploader.upload_stream(
-            {
-                folder:  'student-evidence',
-                ocr:     'adv_ocr',
-                timeout: 60000
-            },
-            (error, result) => {
-                if (result) resolve(result);
-                else reject(error);
-            }
-        );
-        stream.end(buffer);
+async function extractEvidenceText(file) {
+  if (!file) return { extractedText: '', fileData: EMPTY_EVIDENCE_FILE };
+
+  const normalizedPath = file.path.replace(/\\/g, '/');
+
+  const fileData = {
+    url: `/${normalizedPath}`,
+    fileName: file.originalname,
+    fileType: file.mimetype
+  };
+
+  let extractedText = '';
+
+  if (file.mimetype === 'application/pdf') {
+    extractedText = await extractTextFromPDF(file.path);
+  } else if (file.mimetype.startsWith('image/')) {
+    extractedText = await extractTextFromImage(file.path);
+  }
+
+  return {
+    extractedText: extractedText.slice(0, MAX_TEXT_LENGTH),
+    fileData
+  };
+}
+
+// ============================================================
+// NLP TAG ANALYSIS
+// ============================================================
+
+async function analyseText(text) {
+  try {
+    const response = await axios.post('http://127.0.0.1:5001/analyse', {
+      text
     });
-};
 
-// ── Category display names for readable notification titles ───────
-const CATEGORY_LABELS = {
-    academic:   'Academic Teaching',
-    library:    'Library',
-    it:         'IT & WiFi',
-    facilities: 'Facilities',
-    canteen:    'Canteen',
-    transport:  'Transport',
-    hostel:     'Hostel',
-    admin:      'Administration'
-};
+    return {
+      tags: response.data.tags || []
+    };
+  } catch (err) {
+    console.error('NLP service error:', err.message);
+    return { tags: [] };
+  }
+}
 
-/* ---------------- ROUTE ---------------- */
+function buildAnalysisText(feedback, evidenceText) {
+  if (!evidenceText) return feedback;
 
-router.post('/submit', upload.single('evidenceFile'), async (req, res) => {
-    try {
-        const { category, feedback } = req.body;
+  return `${feedback}\n\nEvidence context:\n${evidenceText}`.slice(0, MAX_TEXT_LENGTH);
+}
 
-        if (!category || !feedback) {
-            return res.status(400).json({
-                success: false,
-                message: 'Category and feedback are required.'
-            });
+// ============================================================
+// NOTIFICATION HELPERS
+// ============================================================
+
+async function createAndEmitNotification({ type, title, message, link }) {
+  const notification = await Notification.create({
+    type,
+    title,
+    message,
+    link
+  });
+
+  emitNewFeedback({
+    notificationId: notification._id,
+    type: notification.type,
+    title: notification.title,
+    message: notification.message,
+    link: notification.link,
+    timestamp: notification.createdAt
+  });
+
+  return notification;
+}
+
+async function handleFeedbackNotification({
+  feedbackDoc,
+  safeFeedback,
+  tags,
+  topicLabel,
+  sentimentLabel
+}) {
+  const preview = safeFeedback.slice(0, 80);
+  const urgentReason = detectUrgency(safeFeedback);
+  const mainLabel = topicLabel || 'feedback';
+
+  if (urgentReason) {
+    await createAndEmitNotification({
+      type: 'negative_feedback',
+      title: `⚠️ Urgent — ${urgentReason}`,
+      message: `${mainLabel}: "${preview}..."`,
+      link: '/admin/feedback'
+    });
+
+    emitUrgentAlert(
+      {
+        _id: feedbackDoc._id,
+        feedback: safeFeedback,
+        tags
+      },
+      urgentReason
+    );
+
+    return;
+  }
+
+  if (sentimentLabel === 'negative') {
+    await createAndEmitNotification({
+      type: 'negative_feedback',
+      title: 'Negative Feedback Received',
+      message: `A student submitted negative feedback. Top tag: ${mainLabel}.`,
+      link: '/admin/dashboard'
+    });
+
+    return;
+  }
+
+  await createAndEmitNotification({
+    type: 'new_feedback',
+    title: `New ${sentimentLabel || 'neutral'} feedback`,
+    message: `"${preview}..."`,
+    link: '/admin/feedback'
+  });
+}
+
+async function handleCategorySpike(topicLabel) {
+  if (!topicLabel) return;
+
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+
+  const todayCount = await Feedback.countDocuments({
+    topicLabel,
+    createdAt: { $gte: todayStart }
+  });
+
+  if (todayCount === 5) {
+    await createAndEmitNotification({
+      type: 'category_spike',
+      title: `${topicLabel} Feedback Spiking`,
+      message: `5 feedbacks related to "${topicLabel}" were received today.`,
+      link: '/admin/insights'
+    });
+  }
+
+  if (todayCount === 10) {
+    await sendSpikeAlert(todayCount, topicLabel);
+  }
+}
+
+async function emitDashboardStats() {
+  const total = await Feedback.countDocuments();
+
+  emitStatsUpdate({
+    total,
+    pending: 0,
+    resolved: 0
+  });
+}
+
+// ============================================================
+// RAG INDEXING HELPER
+// ============================================================
+
+async function safelyIndexFeedbackForRAG(feedbackId) {
+  try {
+    await Feedback.findByIdAndUpdate(feedbackId, {
+      ragStatus: 'processing',
+      ragError: null
+    });
+
+    await indexFeedbackForRAG(feedbackId);
+  } catch (err) {
+    console.error('RAG indexing error:', err.message);
+
+    await Feedback.findByIdAndUpdate(feedbackId, {
+      ragStatus: 'failed',
+      ragError: err.message
+    }).catch(() => {});
+  }
+}
+
+// ============================================================
+// POST /api/feedback/submit
+// ============================================================
+
+router.post(
+  '/submit',
+
+  // ------------------------------------------------------------
+  // STEP 1: Run multer only for multipart/form-data requests
+  // ------------------------------------------------------------
+
+  (req, res, next) => {
+    console.log('SUBMIT REQUEST RECEIVED');
+    console.log('CONTENT-TYPE:', req.headers['content-type']);
+
+    if (req.headers['content-type']?.includes('multipart/form-data')) {
+      return upload.single('evidenceFile')(req, res, (err) => {
+        if (err) {
+          console.error('MULTER ERROR:', err.message);
+
+          return res.status(400).json({
+            success: false,
+            message: err.message || 'File upload error.'
+          });
         }
 
-        const safeFeedback = feedback.slice(0, MAX_TEXT_LENGTH);
-
-        const newFeedback = new Feedback({
-            category,
-            feedback:       safeFeedback,
-            summary:        null,
-            sentiment:      null,
-            sentimentScore: null,
-            emotion:        null,        // ← added
-            emotionTrigger: null,        // ← added
-            embedding:      []
-        });
-
-        await newFeedback.save();
-
-        // ✅ Respond to student immediately
-        res.json({
-            success: true,
-            message: 'Feedback submitted successfully!',
-            data: { id: newFeedback.anonymous_id }
-        });
-
-        /* ────────────────────────────────────────────────
-           BACKGROUND PROCESSING
-        ──────────────────────────────────────────────── */
-        (async () => {
-            try {
-                let finalText     = safeFeedback;
-                let extractedText = '';
-
-                // ── Step 1: Handle file upload ────────────────────
-                if (req.file) {
-                    const uploadResult = await streamUpload(req.file.buffer);
-
-                    if (req.file.mimetype === 'application/pdf') {
-                        const pdfData = await pdfParse(req.file.buffer);
-                        extractedText = pdfData.text;
-                    } else if (req.file.mimetype.startsWith('image/')) {
-                        extractedText = uploadResult.info?.ocr?.adv_ocr?.data[0]?.fullTextAnnotation?.text || '';
-                    }
-
-                    if (extractedText) {
-                        finalText = `${safeFeedback}. Evidence context: ${extractedText}`;
-                        finalText = finalText.slice(0, MAX_TEXT_LENGTH);
-                    }
-
-                    await Feedback.findByIdAndUpdate(newFeedback._id, {
-                        evidenceFile: {
-                            url:      uploadResult.secure_url,
-                            fileName: req.file.originalname,
-                            fileType: req.file.mimetype
-                        },
-                        evidenceText: extractedText.slice(0, MAX_TEXT_LENGTH)
-                    });
-                }
-
-                // ── Step 2: Embedding + sentiment in parallel ─────
-                const [embedding, sentimentResult] = await Promise.all([
-                    generateEmbedding(finalText),
-                    analyzeSentiment(finalText)
-                ]);
-
-                // ── Step 3: Save embedding, sentiment AND emotion ─
-                // sentimentResult now returns: label, score, emotion, emotion_trigger
-                await Feedback.findByIdAndUpdate(newFeedback._id, {
-                    embedding,
-                    sentiment:      sentimentResult.label,
-                    sentimentScore: sentimentResult.score,
-                    emotion:        sentimentResult.emotion        || null, // ← added
-                    emotionTrigger: sentimentResult.emotion_trigger || null  // ← added
-                });
-
-                console.log(
-                    `Background processing complete for ${newFeedback.anonymous_id} — ` +
-                    `sentiment: ${sentimentResult.label}, emotion: ${sentimentResult.emotion}`
-                );
-
-                // ── Step 4: Notifications ─────────────────────────
-                const categoryLabel = CATEGORY_LABELS[category] || category;
-                const preview       = safeFeedback.slice(0, 80);
-
-                const urgentReason = detectUrgency(safeFeedback);
-                console.log('🚨 Urgency check:', safeFeedback, '→', urgentReason);
-
-                if (urgentReason) {
-                    const urgentNotif = await Notification.create({
-                        type:     'negative_feedback',
-                        title:    `⚠️ Urgent — ${urgentReason}`,
-                        message:  `${categoryLabel}: "${preview}..."`,
-                        category: category,
-                        link:     `/admin/feedback?category=${category}&status=pending`
-                    });
-
-                    emitNewFeedback({
-                        notificationId: urgentNotif._id,
-                        type:           urgentNotif.type,
-                        title:          urgentNotif.title,
-                        message:        urgentNotif.message,
-                        category,
-                        link:           urgentNotif.link,
-                        timestamp:      urgentNotif.createdAt
-                    });
-
-                    emitUrgentAlert({
-                        _id:      newFeedback._id,
-                        category: category,
-                        feedback: safeFeedback
-                    }, urgentReason);
-                    console.log('📡 emitUrgentAlert fired for:', newFeedback._id);
-
-                } else if (sentimentResult.label === 'negative') {
-                    const negNotif = await Notification.create({
-                        type:     'negative_feedback',
-                        title:    'Negative Feedback Received',
-                        message:  `A student submitted negative feedback about ${category}.`,
-                        category: category,
-                        link:     '/admin/dashboard'
-                    });
-
-                    emitNewFeedback({
-                        notificationId: negNotif._id,
-                        type:           negNotif.type,
-                        title:          negNotif.title,
-                        message:        negNotif.message,
-                        category,
-                        link:           negNotif.link,
-                        timestamp:      negNotif.createdAt
-                    });
-
-                } else {
-                    const newNotif = await Notification.create({
-                        type:     'new_feedback',
-                        title:    `New ${sentimentResult.label} feedback — ${categoryLabel}`,
-                        message:  `"${preview}..."`,
-                        category: category,
-                        link:     '/admin/feedback'
-                    });
-
-                    emitNewFeedback({
-                        notificationId: newNotif._id,
-                        type:           newNotif.type,
-                        title:          newNotif.title,
-                        message:        newNotif.message,
-                        category,
-                        link:           newNotif.link,
-                        timestamp:      newNotif.createdAt
-                    });
-                }
-
-                // ── Category spike check ──────────────────────────
-                const todayStart = new Date();
-                todayStart.setHours(0, 0, 0, 0);
-                const todayCount = await Feedback.countDocuments({
-                    category,
-                    createdAt: { $gte: todayStart }
-                });
-
-                if (todayCount === 5) {
-                    const spikeNotif = await Notification.create({
-                        type:     'category_spike',
-                        title:    `${category.charAt(0).toUpperCase() + category.slice(1)} Feedback Spiking`,
-                        message:  `5 feedbacks received in ${category} today. Consider reviewing.`,
-                        category: category,
-                        link:     '/admin/insights'
-                    });
-
-                    emitNewFeedback({
-                        notificationId: spikeNotif._id,
-                        type:           spikeNotif.type,
-                        title:          spikeNotif.title,
-                        message:        spikeNotif.message,
-                        category,
-                        link:           spikeNotif.link,
-                        timestamp:      spikeNotif.createdAt
-                    });
-                }
-
-                if (todayCount === 10) {
-                    await sendSpikeAlert(todayCount, category);
-                }
-
-                // Push updated stats so dashboard counts refresh live
-                const [total, pending, resolved] = await Promise.all([
-                    Feedback.countDocuments(),
-                    Feedback.countDocuments({ status: 'pending' }),
-                    Feedback.countDocuments({ status: 'resolved' })
-                ]);
-                emitStatsUpdate({ total, pending, resolved });
-
-            } catch (bgErr) {
-                console.error('Background processing error:', bgErr.message);
-            }
-        })();
-
-    } catch (error) {
-        console.error('Submission error:', error.message);
-        res.status(500).json({
-            success: false,
-            message: 'Server error during feedback submission.'
-        });
+        next();
+      });
     }
-});
+
+    next();
+  },
+
+  // ------------------------------------------------------------
+  // STEP 2: Handle feedback submission
+  // ------------------------------------------------------------
+
+  async (req, res) => {
+    try {
+      console.log('SUBMIT ROUTE HIT');
+      console.log('BODY:', req.body);
+      console.log('FILE:', req.file);
+
+      const { feedback } = req.body;
+
+      if (!feedback || !feedback.trim()) {
+        return res.status(400).json({
+          success: false,
+          message: 'Feedback is required.'
+        });
+      }
+
+      const safeFeedback = feedback.trim().slice(0, MAX_FEEDBACK_LENGTH);
+      const { extractedText, fileData } = await extractEvidenceText(req.file);
+
+      // --------------------------------------------------------
+      // STEP 3: Save raw feedback immediately
+      // --------------------------------------------------------
+
+      const newFeedback = await Feedback.create({
+        feedback: safeFeedback,
+
+        tags: [],
+        topicLabel: null,
+        topicShortLabel: null,
+
+        summary: null,
+
+        sentiment: null,
+        sentimentScore: null,
+        emotion: null,
+        emotionTrigger: null,
+
+        evidenceFile: fileData,
+        evidenceText: extractedText || null,
+
+        ragStatus: 'pending',
+        ragError: null,
+        indexedAt: null,
+
+        processingStatus: 'pending',
+        processingError: null,
+        processedAt: null,
+      });
+
+      // --------------------------------------------------------
+      // STEP 4: Return response immediately
+      // --------------------------------------------------------
+
+      res.json({
+        success: true,
+        message: 'Feedback submitted successfully!',
+        data: {
+          id: newFeedback.anonymous_id
+        }
+      });
+
+      // --------------------------------------------------------
+      // STEP 5: Background processing
+      // --------------------------------------------------------
+    processFeedbackJob(newFeedback._id).catch((err) => {
+      console.error('Feedback processing job failed:', err.message);
+    });
+    } catch (error) {
+      console.error('Submission error:', error.message);
+
+      res.status(500).json({
+        success: false,
+        message: 'Server error during feedback submission.'
+      });
+    }
+  }
+);
 
 module.exports = router;

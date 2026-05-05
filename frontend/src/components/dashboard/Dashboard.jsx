@@ -1,86 +1,98 @@
-import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom'; // ← ADDED (needed for onView navigation)
-import { AlertCircle, RefreshCw } from 'lucide-react';
-import { useDashboardData } from '../../hooks/useDashboardData';
-import { dashboardConfig } from '../../config/dashboardConfig';
+import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import {
+  AlertCircle,
+  RefreshCw,
+  Sparkles,
+  Brain,
+  Flame,
+  MessageSquare,
+  Activity,
+  SlidersHorizontal,
+} from 'lucide-react';
 
-// ← ADDED: Real-time hook and urgent alert banner
+import { useDashboardData } from '../../hooks/useDashboardData';
 import { useRealTimeNotifications } from '../../hooks/useRealTimeNotifications';
-import { UrgentAlertBanner } from './UrgentAlertBanner';
 
 import DashboardHeader from './DashboardHeader';
-import StatsCards from './StatsCards';
 import DateFilters from './DateFilters';
 import CategoryChart from './CategoryChart';
-import TimelineChart from './TimelineChart';
 import RecentFeedback from './RecentFeedback';
 import TrendingIssues from './TrendingIssues';
-import ResolutionsPanel from './ResolutionsPanel';
-import ResolutionModal from './ResolutionModal';
-import AiCTA from './AiCTA';
 import SentimentAnalysis from './SentimentAnalysis';
-import ClariCoin from './ClariCoin';
+import { UrgentAlertBanner } from './UrgentAlertBanner';
 
-// ─────────────────────────────────────────────
-// Section wrapper — shared card shell
-// ─────────────────────────────────────────────
 const SectionCard = ({ children, className = '' }) => (
-  <div
+  <section
     className={`
-      bg-white border border-[#E2E8F0] rounded-[20px]
-      shadow-[0_1px_3px_rgba(15,23,42,0.04),0_8px_24px_rgba(15,23,42,0.05)]
-      transition-[box-shadow,border-color] duration-200 ease-in-out
-      hover:shadow-[0_4px_20px_rgba(37,99,235,0.10)] hover:border-[#BFDBFE]
+      relative overflow-hidden rounded-[28px]
+      border border-slate-200 bg-white
+      shadow-[0_18px_45px_rgba(15,23,42,0.06)]
       ${className}
     `}
   >
     {children}
-  </div>
+  </section>
 );
 
-// ─────────────────────────────────────────────
-// Section header inside a card
-// ─────────────────────────────────────────────
-const SectionHeader = ({ title, subtitle, badge }) => (
-  <div className="flex items-start justify-between gap-3 mb-5">
-    <div>
-      <h3
-        className="text-base font-bold tracking-[-0.025em] text-[#0F172A] m-0"
-        style={{ fontFamily: "'Plus Jakarta Sans', 'DM Sans', sans-serif" }}
-      >
-        {title}
-      </h3>
-      {subtitle && (
-        <p
-          className="mt-1 text-[13px] text-[#64748B] leading-[1.5]"
-          style={{ fontFamily: "'Plus Jakarta Sans', 'DM Sans', sans-serif" }}
-        >
-          {subtitle}
-        </p>
+const SectionHeader = ({ icon: Icon, title, subtitle, badge, tone = 'blue' }) => {
+  const tones = {
+    blue: 'bg-blue-50 text-blue-600 border-blue-100',
+    green: 'bg-green-50 text-green-600 border-green-100',
+    red: 'bg-red-50 text-red-600 border-red-100',
+    slate: 'bg-slate-50 text-slate-600 border-slate-100',
+  };
+
+  return (
+    <div className="mb-5 flex items-start justify-between gap-4">
+      <div className="flex items-start gap-3">
+        {Icon && (
+          <div
+            className={`
+              flex h-11 w-11 shrink-0 items-center justify-center
+              rounded-2xl border ${tones[tone]}
+            `}
+          >
+            <Icon size={20} />
+          </div>
+        )}
+
+        <div>
+          <h3 className="text-[17px] font-black tracking-[-0.03em] text-slate-950">
+            {title}
+          </h3>
+
+          {subtitle && (
+            <p className="mt-1 text-sm leading-relaxed text-slate-500">
+              {subtitle}
+            </p>
+          )}
+        </div>
+      </div>
+
+      {badge && (
+        <span className="shrink-0 rounded-full border border-blue-100 bg-blue-50 px-3 py-1 text-[11px] font-bold text-blue-600">
+          {badge}
+        </span>
       )}
     </div>
-    {badge && (
-      <span
-        className="
-          shrink-0 inline-flex items-center
-          bg-[#EFF6FF] border border-[#DBEAFE] rounded-[20px]
-          px-[10px] py-[3px] text-[11px] font-semibold text-[#2563EB]
-          tracking-[0.01em] whitespace-nowrap
-        "
-        style={{ fontFamily: "'Plus Jakarta Sans', 'DM Sans', sans-serif" }}
-      >
-        {badge}
-      </span>
-    )}
-  </div>
-);
+  );
+};
 
-// ─────────────────────────────────────────────
-// Main Dashboard
-// ─────────────────────────────────────────────
 const Dashboard = () => {
   const [dateFilter, setDateFilter] = useState('all');
-  const [resolutionModalOpen, setResolutionModalOpen] = useState(false);
+
+  const navigate = useNavigate();
+
+  const { urgentAlerts, dismissAlert } = useRealTimeNotifications();
+
+  const {
+    data,
+    loading,
+    error,
+    lastUpdated,
+    refresh,
+  } = useDashboardData(dateFilter);
 
   const [admin] = useState(() => {
     try {
@@ -90,318 +102,238 @@ const Dashboard = () => {
     }
   });
 
-  const navigate = useNavigate(); // ← ADDED (needed for onView navigation)
+  const negativeCount = data?.sentiment?.negative ?? 0;
 
-  // ← ADDED: Wire up real-time socket hook
-  const { urgentAlerts, dismissAlert } = useRealTimeNotifications();
-
-  const { data, loading, error, lastUpdated, refresh } = useDashboardData(dateFilter);
-
-  const thisWeekCount = data?.stats?.thisWeekCount ?? 0;
-  const lastWeekCount = data?.stats?.lastWeekCount ?? 0;
-
-  useEffect(() => {
-    if (data?.stats) console.log('Dashboard stats:', data.stats);
-  }, [data]);
-
-  // ── Loading state ────────────────────────────────────────────────────────
   if (loading || !data) {
     return (
-      <div
-        className="min-h-screen bg-[#F4F7FB] flex items-center justify-center px-6 py-12"
-        style={{ fontFamily: "'Plus Jakarta Sans', 'DM Sans', sans-serif" }}
-      >
-        <div
-          className="
-            w-full max-w-[400px] bg-white border border-[#E2E8F0]
-            rounded-[28px] px-8 py-10 text-center
-            shadow-[0_10px_40px_rgba(15,23,42,0.08)]
-          "
-        >
-          <div
-            className="
-              w-14 h-14 rounded-full border-4 border-[#DBEAFE] border-t-[#2563EB]
-              mx-auto mb-6 animate-spin
-            "
-          />
-          <h2
-            className="text-[22px] font-bold tracking-[-0.03em] text-[#0F172A] mb-2"
-            style={{ fontFamily: "'Plus Jakarta Sans', 'DM Sans', sans-serif" }}
-          >
-            Loading Dashboard
+      <div className="flex min-h-screen items-center justify-center bg-[#F4F7FB] px-6">
+        <div className="w-full max-w-[390px] rounded-[32px] border border-slate-200 bg-white px-8 py-10 text-center shadow-[0_24px_70px_rgba(15,23,42,0.10)]">
+          <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-3xl border border-blue-100 bg-blue-50">
+            <Brain className="animate-pulse text-blue-600" size={30} />
+          </div>
+
+          <h2 className="text-xl font-black tracking-[-0.03em] text-slate-950">
+            Loading dashboard
           </h2>
-          <p
-            className="text-sm text-[#64748B]"
-            style={{ fontFamily: "'Plus Jakarta Sans', 'DM Sans', sans-serif" }}
-          >
-            Preparing your analytics…
+
+          <p className="mt-2 text-sm text-slate-500">
+            Preparing feedback insights...
           </p>
         </div>
       </div>
     );
   }
 
-  // ── Page layout ──────────────────────────────────────────────────────────
+  const hasNegativeFeedback = negativeCount > 0;
+
   return (
-    <div
-      className="min-h-screen bg-[#F4F7FB]"
-      style={{ fontFamily: "'Plus Jakarta Sans', 'DM Sans', sans-serif" }}
-    >
-      {/* Subtle top-of-page accent bar */}
-      <div
-        className="h-[3px] sticky top-0 z-10"
-        style={{
-          background:
-            'linear-gradient(90deg, #2563EB 0%, #3B82F6 60%, #22C55E 100%)',
-        }}
-      />
-      {/* ── Watermark logo ─────────────────────────────────────────────────── */}
-            <div style={{
-              position: 'fixed',
-              top: '50%',
-              left: '50%',
-              transform: 'translate(-50%, -50%)',
-              pointerEvents: 'none',
-              zIndex: 0,
-              opacity: 0.08,
-            }}>
-              <img
-                src="/src/assets/Clari.png"
-                alt=""
-                style={{ width: '520px', height: '520px', objectFit: 'contain' }}
-              />
-            </div>
+    <div className="relative min-h-screen bg-[#F4F7FB]">
+      <div className="sticky top-0 z-30 h-[3px] bg-gradient-to-r from-blue-600 via-cyan-500 to-green-500" />
 
-      <div className="max-w-[1280px] mx-auto px-5 py-7">
+      <main className="mx-auto max-w-[1280px] space-y-6 px-4 py-6 sm:px-6 lg:px-8">
+        <DashboardHeader
+          lastUpdated={lastUpdated}
+          onRefresh={refresh}
+          loading={loading}
+          admin={admin}
+          thisWeekCount={data?.stats?.thisWeekCount ?? 0}
+          lastWeekCount={data?.stats?.lastWeekCount ?? 0}
+        />
 
-        {/* ── Header ───────────────────────────────────────────────────────── */}
-        {dashboardConfig.showHeader && (
-          <div className="mb-7">
-            <DashboardHeader
-              lastUpdated={lastUpdated}
-              onRefresh={refresh}
-              loading={loading}
-              admin={admin}
-              thisWeekCount={thisWeekCount}
-              lastWeekCount={lastWeekCount}
-            />
-          </div>
-        )}
-
-        {/* ── ADDED: Urgent alert banners ───────────────────────────────────── */}
         <UrgentAlertBanner
           alerts={urgentAlerts}
           onDismiss={dismissAlert}
           onView={() => navigate('/admin/feedback')}
         />
 
-        {/* ── Error banner ─────────────────────────────────────────────────── */}
         {error && (
-          <div
-            className="
-              mb-6 bg-[#FEF2F2] border border-[#FECACA]
-              rounded-2xl p-4 px-5 flex items-start gap-[14px]
-            "
-          >
-            <div
-              className="
-                shrink-0 w-10 h-10 rounded-[10px] bg-white border border-[#FEE2E2]
-                flex items-center justify-center
-              "
-            >
-              <AlertCircle size={18} color="#DC2626" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <h3 className="text-[13px] font-bold text-[#991B1B] mb-[3px]">
+          <div className="flex items-start gap-3 rounded-3xl border border-red-200 bg-red-50 p-4">
+            <AlertCircle size={20} className="mt-1 text-red-600" />
+
+            <div className="flex-1">
+              <h3 className="text-sm font-black text-red-900">
                 Something went wrong
               </h3>
-              <p className="text-[13px] text-[#B91C1C] m-0">{error}</p>
+              <p className="text-sm text-red-700">{error}</p>
             </div>
+
             <button
               onClick={refresh}
-              className="
-                shrink-0 inline-flex items-center gap-[6px]
-                bg-white border border-[#FCA5A5] rounded-[10px]
-                px-[14px] py-[7px] text-[13px] font-semibold text-[#B91C1C]
-                cursor-pointer
-              "
-              style={{ fontFamily: "'Plus Jakarta Sans', 'DM Sans', sans-serif" }}
+              className="inline-flex items-center gap-2 rounded-2xl border border-red-200 bg-white px-4 py-2 text-sm font-bold text-red-700 transition hover:bg-red-50"
             >
-              <RefreshCw size={13} />
+              <RefreshCw size={14} />
               Retry
             </button>
           </div>
         )}
 
-        {/* ── Stats row + Date filter ───────────────────────────────────────── */}
-        <div className="grid grid-cols-1 lg:grid-cols-[3fr_1fr] gap-5 mb-6 items-start">
-          <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }}>
-            <StatsCards stats={data.stats} />
-          </div>
-          <SectionCard className="p-5 self-start">
-            <SectionHeader
-              title="Filter Overview"
-              subtitle="Narrow dashboard insights by timeline."
-            />
-            <DateFilters currentFilter={dateFilter} onFilterChange={setDateFilter} />
-          </SectionCard>
-        </div>
+        {/* ACTION SUMMARY */}
+        <section className="relative overflow-hidden rounded-[34px] border border-blue-100 bg-white p-6 shadow-[0_24px_70px_rgba(15,23,42,0.08)] sm:p-8">
+          <div className="absolute -right-24 -top-24 h-72 w-72 rounded-full bg-blue-100 blur-3xl" />
+          <div className="absolute -bottom-24 -left-24 h-72 w-72 rounded-full bg-green-100 blur-3xl" />
 
-        {/* ── Sentiment + Charts ───────────────────────────────────────────── */}
-        <div
-          className="grid gap-5 mb-6"
-          style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))' }}
-        >
-          {dashboardConfig.showSentimentAnalysis && (
-            <SectionCard className="col-span-full p-6 px-7">
-              <SectionHeader
-                title="Sentiment Analysis"
-                subtitle="Positive, neutral, and negative feedback patterns."
-                badge="Live overview"
-              />
-              <SentimentAnalysis sentimentData={data.sentiment} />
-            </SectionCard>
-          )}
+          <div className="relative grid grid-cols-1 items-center gap-8 lg:grid-cols-[1fr_360px]">
+            <div>
+            
 
-          {dashboardConfig.showCharts && dashboardConfig.showCategoryChart && (
-            <SectionCard
-              className="h-[340px] p-6 px-7 overflow-hidden"
-              style={{ gridColumn: 'span 2' }}
+              <h1 className="mt-5 max-w-3xl text-2xl font-black leading-[1.08] tracking-[-0.05em] text-slate-950 sm:text-4xl">
+                {hasNegativeFeedback
+                  ? 'Student feedback shows issues that need attention.'
+                  : 'Student feedback is currently stable.'}
+              </h1>
+
+              <p className="mt-4 max-w-2xl text-sm leading-relaxed text-slate-600 sm:text-base">
+                This dashboard focuses on sentiment, recent feedback, repeated issues,
+                and problem categories so admins can decide what to review first.
+              </p>
+            </div>
+
+            <div
+              className={`
+                rounded-[26px] border p-5
+                ${
+                  hasNegativeFeedback
+                    ? 'border-red-100 bg-red-50'
+                    : 'border-green-100 bg-green-50'
+                }
+              `}
             >
-              <SectionHeader
-                title="Feedback by Category"
-                subtitle="Compare the volume of submissions across categories."
-              />
-              <CategoryChart data={data.categoryData} />
-            </SectionCard>
-          )}
+              <div className="flex items-center gap-3">
+                <div
+                  className={`
+                    flex h-12 w-12 items-center justify-center rounded-2xl
+                    ${
+                      hasNegativeFeedback
+                        ? 'bg-red-100 text-red-600'
+                        : 'bg-green-100 text-green-600'
+                    }
+                  `}
+                >
+                  <AlertCircle size={24} />
+                </div>
 
-          {dashboardConfig.showCharts && dashboardConfig.showTimeline && (
-            <SectionCard className="h-[340px] p-6 px-7 overflow-hidden">
-              <SectionHeader
-                title="Feedback Over Time"
-                subtitle="Track reporting activity and momentum over time."
-              />
-              <TimelineChart data={data.timeData} />
-            </SectionCard>
-          )}
-        </div>
-
-        {/* ── Recent Feedback + Trending Issues ────────────────────────────── */}
-        {(dashboardConfig.showRecentFeedback || dashboardConfig.showTrendingIssues) && (
-          <div
-            className="grid gap-5 mb-6"
-            style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))' }}
-          >
-            {dashboardConfig.showRecentFeedback && (
-              <SectionCard className="h-[440px] p-6 px-7 overflow-hidden">
-                <SectionHeader
-                  title="Recent Feedback"
-                  subtitle="Latest submissions requiring visibility and quick review."
-                />
-                <RecentFeedback items={data.recent} />
-              </SectionCard>
-            )}
-
-            {dashboardConfig.showTrendingIssues && (
-              <SectionCard className="h-[440px] p-6 px-7 overflow-hidden">
-                <SectionHeader
-                  title="Trending Issues"
-                  subtitle="Repeated problem areas gaining traction this period."
-                />
-                <TrendingIssues trends={data.trends} />
-              </SectionCard>
-            )}
-          </div>
-        )}
-
-        {/* ── Resolutions Panel ─────────────────────────────────────────────── */}
-        {dashboardConfig.showResolutionsPanel && (
-          <div className="mb-6">
-            <SectionCard>
-              <div
-                className="
-                  border-b border-[#F1F5F9] px-7 py-5
-                  flex items-center justify-between gap-3
-                "
-              >
                 <div>
-                  <h3
-                    className="text-base font-bold tracking-[-0.025em] text-[#0F172A] m-0"
-                    style={{ fontFamily: "'Plus Jakarta Sans', 'DM Sans', sans-serif" }}
-                  >
-                    Recent Resolutions
-                  </h3>
                   <p
-                    className="mt-1 text-[13px] text-[#64748B]"
-                    style={{ fontFamily: "'Plus Jakarta Sans', 'DM Sans', sans-serif" }}
+                    className={`
+                      text-sm font-black
+                      ${hasNegativeFeedback ? 'text-red-900' : 'text-green-900'}
+                    `}
                   >
-                    Monitor resolved issues and keep actions accountable.
+                    {hasNegativeFeedback ? 'Priority focus' : 'No urgent pattern'}
+                  </p>
+
+                  <p
+                    className={`
+                      text-sm
+                      ${hasNegativeFeedback ? 'text-red-700' : 'text-green-700'}
+                    `}
+                  >
+                    {hasNegativeFeedback
+                      ? 'Review trending issues and recent feedback first.'
+                      : 'Keep monitoring new feedback as it arrives.'}
                   </p>
                 </div>
-                <span
-                  className="
-                    inline-flex items-center gap-[5px]
-                    bg-[#F0FDF4] border border-[#BBF7D0] rounded-[20px]
-                    px-3 py-1 text-[11px] font-semibold text-[#166534] whitespace-nowrap
-                  "
-                  style={{ fontFamily: "'Plus Jakarta Sans', 'DM Sans', sans-serif" }}
-                >
-                  <span className="w-[6px] h-[6px] rounded-full bg-[#22C55E] inline-block" />
-                  All resolved
-                </span>
               </div>
-              <div className="p-6 px-7">
-                <ResolutionsPanel resolutions={data.resolutions} onRefresh={refresh} />
+
+              <button
+                onClick={() => navigate('/admin/feedback')}
+                className={`
+                  mt-5 w-full rounded-2xl px-4 py-3 text-sm font-bold text-white transition
+                  ${
+                    hasNegativeFeedback
+                      ? 'bg-red-600 hover:bg-red-700'
+                      : 'bg-green-600 hover:bg-green-700'
+                  }
+                `}
+              >
+                Review feedback
+              </button>
+            </div>
+          </div>
+        </section>
+
+        {/* SENTIMENT + FILTER */}
+        <section className="grid grid-cols-1 items-start gap-6 xl:grid-cols-[1fr_340px]">
+          <SectionCard className="bg-gradient-to-br from-white to-blue-50/40 p-5 sm:p-6">
+            <SectionHeader
+              icon={Brain}
+              title="Sentiment Analysis"
+              subtitle="Understand whether feedback is positive, neutral, or negative."
+              badge="AI monitored"
+              tone="blue"
+            />
+            <SentimentAnalysis sentimentData={data.sentiment} />
+          </SectionCard>
+
+          <SectionCard className="p-5 sm:p-6">
+            <SectionHeader
+              icon={SlidersHorizontal}
+              title="Filter Overview"
+              subtitle="Change the feedback period without cluttering the page."
+              tone="slate"
+            />
+            <DateFilters
+              currentFilter={dateFilter}
+              onFilterChange={setDateFilter}
+            />
+          </SectionCard>
+        </section>
+
+        {/* MAIN WORK AREA */}
+        <section className="grid grid-cols-1 gap-6 lg:grid-cols-[1.15fr_0.85fr]">
+          <SectionCard className="min-h-[460px] p-5 sm:p-6">
+            <SectionHeader
+              icon={MessageSquare}
+              title="Recent Feedback"
+              subtitle="Newest student submissions for quick review."
+              badge="Latest"
+              tone="green"
+            />
+            <RecentFeedback items={data.recent} />
+          </SectionCard>
+
+          <div className="space-y-6">
+            <SectionCard className="min-h-[260px] border-red-100 bg-gradient-to-br from-white to-red-50/50 p-5 sm:p-6">
+              <SectionHeader
+                icon={Flame}
+                title="Trending Issues"
+                subtitle="Repeated problems detected across student feedback."
+                badge="Watchlist"
+                tone="red"
+              />
+              <TrendingIssues trends={data.trends} />
+            </SectionCard>
+
+            <SectionCard className="min-h-[260px] p-5 sm:p-6">
+              <SectionHeader
+                icon={Activity}
+                title="Problem Categories"
+                subtitle="See where feedback is concentrated."
+                tone="blue"
+              />
+              <div className="h-[240px] sm:h-[280px]">
+                <CategoryChart data={data.categoryData} />
               </div>
             </SectionCard>
           </div>
-        )}
+        </section>
+      </main>
 
-        {/* ── AI CTA ────────────────────────────────────────────────────────── */}
-        {dashboardConfig.showAiCTA && (
-          <div
-            className="rounded-3xl p-[2px] mb-2"
-            style={{
-              background: 'linear-gradient(135deg, #1E3A8A 0%, #2563EB 50%, #1D4ED8 100%)',
-              boxShadow: '0 16px 48px rgba(37,99,235,0.28)',
-            }}
-          >
-            <div
-              className="rounded-[22px] p-8 relative overflow-hidden"
-              style={{
-                background: 'linear-gradient(135deg, #1E40AF 0%, #2563EB 60%, #1D4ED8 100%)',
-              }}
-            >
-              <div
-                className="absolute inset-0 pointer-events-none"
-                style={{
-                  background:
-                    'radial-gradient(ellipse at 80% 50%, rgba(255,255,255,0.06) 0%, transparent 60%)',
-                }}
-              />
-              <div
-                className="absolute -top-10 -right-10 w-[200px] h-[200px] rounded-full pointer-events-none"
-                style={{ background: 'rgba(255,255,255,0.04)' }}
-              />
-              <div className="relative text-white">
-                <AiCTA />
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* ── Resolution Modal ──────────────────────────────────────────────── */}
-      <ResolutionModal
-        isOpen={resolutionModalOpen}
-        onClose={() => setResolutionModalOpen(false)}
-        onSuccess={refresh}
-      />
-
-      {/* ── Clari spinning logo — fixed bottom-left ───────────────────────── */}
-      <ClariCoin size={48} />
-
+      {/* FLOATING AI ASSISTANT */}
+      <button
+     onClick={() => navigate('/admin/chat')}
+        className="
+          group fixed bottom-6 right-6 z-50
+          flex h-16 w-16 items-center justify-center rounded-full
+          bg-gradient-to-br from-blue-600 via-blue-500 to-green-500
+          text-white shadow-[0_22px_50px_rgba(37,99,235,0.40)]
+          transition hover:scale-105 active:scale-95
+        "
+        aria-label="Open AI Assistant"
+      >
+        <span className="absolute inset-0 rounded-full bg-blue-500/20 animate-ping" />
+        <Sparkles size={28} className="relative z-10" />
+      </button>
     </div>
   );
 };

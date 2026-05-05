@@ -1,0 +1,15 @@
+{
+  "devDependencies": {
+    "concurrently": "^9.2.1",
+    "nodemon": "^3.1.10"
+  },
+  "scripts": {
+    "dev": "concurrently \"npm run dev:node\" \"npm run dev:python\"",
+    "dev:node": "nodemon server.js",
+    "dev:python": "cd backend/python && .\\venv\\Scripts\\python.exe sentiment_server.py"
+  },
+  "dependencies": {
+    "express": "^5.2.1",
+    "multer": "^2.1.1"
+  }
+}

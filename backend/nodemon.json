@@ -1,0 +1,14 @@
+{
+  "ignore": [
+    "uploads/*",
+    "uploads/**/*",
+    "faiss/*",
+    "faiss/**/*",
+    "vector_store/*",
+    "vector_store/**/*",
+    "python/faiss/*",
+    "python/faiss/**/*",
+    "*.index",
+    "*.pkl"
+  ]
+}

@@ -1,18 +1,67 @@
-const express      = require('express');
-const router       = express.Router();
-const Feedback     = require('../models/Feedback');
-const Resolution   = require('../models/Resolution');
-const ChatSession  = require('../models/ChatSession');
-const Groq         = require('groq-sdk');
-const rateLimit    = require('express-rate-limit');
-const { LRUCache } = require('lru-cache');
+// ─────────────────────────────────────────────────────────────────────────────
+// aiRoutes.js
+//
+// PURPOSE:
+// Main AI layer for the university feedback analytics system.
+//
+// PUBLIC ROUTES:
+//   GET  /digest          → auto-generated daily briefing for the admin dashboard
+//   POST /chat            → question/answer with full RAG pipeline
+//   POST /chat/stream     → same pipeline, streamed via SSE
+//
+// UTILITY ROUTES:
+//   GET    /session/:id   → restore chat history after page refresh
+//   DELETE /session/:id   → clear a chat session
+//   GET    /summary/:id   → generate or retrieve a per-feedback summary
+//
+// ── PIPELINE ARCHITECTURE ────────────────────────────────────────────────────
+//
+//  Admin message
+//       │
+//       ├─ Gibberish?         → reject early, no API call
+//       ├─ Chit-chat?         → handle with minimal/no Groq call
+//       ├─ Stats question?    → query DB counts, skip FAISS
+//       ├─ Aggregation?       → fetch broad feedback, group dynamically
+//       │
+//       ├─ Date only, no topic  → MODE A
+//       │    └─ MongoDB date filter → buildFeedbackSummaryContext → Groq
+//       │
+//       └─ Topic (with/without date) → MODE B
+//            └─ generateEmbedding → searchFaiss → FeedbackChunk lookup
+//                   → softFilterChunkResults → buildChunkContext → Groq
+//
+// ─────────────────────────────────────────────────────────────────────────────
 
-const MAX_TEXT_LENGTH = 4000;
+const express       = require('express');
+const router        = express.Router();
+const Feedback      = require('../models/Feedback');
+const Resolution    = require('../models/Resolution');
+const ChatSession   = require('../models/ChatSession');
+const FeedbackChunk = require('../models/FeedbackChunk');
+const Groq          = require('groq-sdk');
+const rateLimit     = require('express-rate-limit');
+const { LRUCache }  = require('lru-cache');
+
+const { generateEmbedding, searchFaiss, searchCategoryFaiss } = require('../services/ragIndexer');
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GROQ CLIENT
+// ─────────────────────────────────────────────────────────────────────────────
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
+// ─────────────────────────────────────────────────────────────────────────────
+// CACHES
+//
+// embeddingCache → question text → float32 vector (max 500, LRU)
+// responseCache  → question text → full AI answer (max 200, TTL 15 min)
+//                  Only cached for non-date questions (date answers change).
+// ─────────────────────────────────────────────────────────────────────────────
 const embeddingCache = new LRUCache({ max: 500 });
 const responseCache  = new LRUCache({ max: 200, ttl: 1000 * 60 * 15 });
 
+// ─────────────────────────────────────────────────────────────────────────────
+// RATE LIMITER — 30 requests per IP per minute
+// ─────────────────────────────────────────────────────────────────────────────
 const chatRateLimiter = rateLimit({
     windowMs: 60 * 1000,
     max: 30,
@@ -20,29 +69,224 @@ const chatRateLimiter = rateLimit({
     legacyHeaders: false,
     message: { success: false, message: 'Too many requests. Please slow down.' }
 });
+// system prompt for all AI interactions
 
-async function groqWithTimeout(params, timeoutMs = 8000) {
-    return Promise.race([
+const SYSTEM_PROMPT = `
+You are an AI assistant for university student feedback analysis.
+
+Your role is to help administrators understand student feedback clearly and accurately.
+
+════════════════════════════
+CORE RULES
+════════════════════════════
+- Use ONLY the provided feedback data.
+- Do NOT invent facts, trends, or examples.
+- Paraphrase feedback — do NOT quote students directly.
+- NEVER include counts, numbers, totals, percentages, or quantities in responses.
+- NEVER include exact counts, numbers, totals, percentages, or quantities.
+- Avoid precise phrases like:
+  - "5 mentions"
+  - "2 out of 6"
+- You may use natural qualitative language like:
+  - "many students"
+  - "several students"
+  - "a few mentions"
+- Always describe patterns qualitatively instead (e.g. "frequent complaints", "recurring issue", "less common concern").
+- If data is limited, say so clearly.
+
+════════════════════════════
+OPENING RULE
+════════════════════════════
+- Never start with:
+  - "Based on..."
+  - "Based on the feedback..."
+  - "Based on the provided data..."
+  - "Based on the top feedback categories..."
+  - "From the data..."
+  - "Looking at the feedback..."
+- Start with the answer itself.
+
+════════════════════════════
+CONVERSATION MEMORY
+════════════════════════════
+- Treat short follow-ups as continuing the previous topic.
+- If the admin says "them", "this", "that", "it", "those", or "they", resolve it using the previous assistant answer.
+- Do NOT switch topics during a follow-up unless the admin clearly names a new topic.
+- If the follow-up is unclear, ask one short clarification question instead of starting new analysis.
+- Do NOT restate the previous answer. Continue from it.
+
+Examples:
+Admin: "What problems are students facing?"
+Assistant: explains lecturer performance, cafeteria, washrooms, WiFi.
+Admin: "What can we do about them?"
+Assistant: gives actions for those same issues only.
+
+Admin: "Tell me about WiFi."
+Assistant: explains WiFi complaints.
+Admin: "How can we fix it?"
+Assistant: gives WiFi actions only.
+
+════════════════════════════
+RESPONSE STYLE
+════════════════════════════
+- Start directly with the main insight.
+- Be clear, natural, and confident.
+- Keep responses concise but meaningful.
+- Group related ideas into themes.
+- Avoid robotic or repetitive phrasing.
+- Do NOT label responses as categories (e.g. "Lecturer Performance", "Cafeteria Services")
+- Write naturally instead of naming categories explicitly
+
+════════════════════════════
+INSIGHT QUALITY
+════════════════════════════
+- Focus on patterns, not isolated comments.
+- Highlight the most important issues first.
+- Do not treat minor and major issues equally.
+- Combine similar feedback into clear themes.
+════════════════════════════
+INTENT DETECTION
+════════════════════════════
+- If the admin asks for actions, fixes, improvements, or solutions (e.g. "how can we solve", "what should we do", "what is the solution"), you MUST switch to solution mode.
+- In solution mode:
+  - Do NOT repeat or restate the problems in detail.
+  - Do NOT re-analyze the issues.
+  - Provide clear, direct actions only.
+- Treat follow-up solution questions as continuation of the previous issues.
+
+════════════════════════════
+SOLUTIONS
+════════════════════════════
+- When the admin asks for solutions:
+  - Give clear, practical actions immediately.
+  - Do NOT restate or summarize the problems in any form.
+- Do NOT include phrases like:
+  - "Students are concerned about..."
+  - "The main issues are..."
+  - "Students are facing..."
+  - Keep explanations short and focused on what should be done.
+  - Each point should be an action, not a description.
+  - Do NOT start solution responses by restating the problems.
+  - Start directly with actions.
+
+- Example:
+  Bad:
+  "Students are struggling with lecture pacing..."
+  
+  Good:
+  "Slow down lecture pacing, include explanations beyond slides, and allow time for questions."
+- Think:
+  "The problems are already known — now act on them."
+
+════════════════════════════
+INVALID INPUT HANDLING
+════════════════════════════
+- Only treat input as invalid if it is clearly meaningless, repetitive, or nonsensical.
+- Minor spelling mistakes, typos, or informal phrasing should still be understood and answered.
+- If the intent of the question is clear, always proceed with analysis.
+- Instead, respond briefly that the message was not understood.
+- Suggest a clear example of a valid question.
+
+Examples of invalid input:
+- repeated words (e.g. "what what", "how how")
+- random or nonsensical text
+- incomplete questions
+
+In these cases, respond like:
+- If rejecting, do it only when the message has no clear meaning.
+- Do NOT reject valid questions with minor typos.
+
+════════════════════════════
+TONE
+════════════════════════════
+Sound like a sharp, knowledgeable colleague — clear and helpful.
+
+════════════════════════════
+PRIORITY
+════════════════════════════
+Accuracy over perfection. Context over fresh retrieval. Continuity over restarting. Clarity over structure.
+`;
+// ─────────────────────────────────────────────────────────────────────────────
+// CHIT-CHAT PROMPTS
+//
+// Minimal Groq prompts for social messages that don't need RAG.
+// 'greeting' is a getter so it reads the current hour fresh each call.
+// 'insult' and 'acknowledgement' are handled inline with static strings.
+// ─────────────────────────────────────────────────────────────────────────────
+const CHIT_CHAT_PROMPTS = {
+    get greeting() {
+        const h = new Date().getHours();
+        const t = h < 12 ? 'morning' : h < 17 ? 'afternoon' : 'evening';
+        return `Reply in one short professional sentence. Start with "Good ${t}." Then say you are ready to help analyze student feedback.`;
+    },
+    gratitude: `The admin thanked you. Respond briefly and naturally in one sentence.`,
+    status:    `The admin asked how you are. Respond in one friendly sentence and redirect to helping with feedback.`,
+    identity:  `Explain in 2-3 sentences that you are an AI feedback analyst for a university suggestion box system. Keep it clear and professional.`,
+    yes_no:    `The admin said yes or no. Check the conversation history and continue directly from where you left off. Start with actual content immediately. No "Sure" or "Of course".`
+};
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   SECTION 1 — UTILITY HELPERS
+═══════════════════════════════════════════════════════════════════════════ */
+
+// ─────────────────────────────────────────────────────────────────────────────
+// groqWithTimeout
+// Wraps a Groq call in a race against a timeout (default 12s).
+// On rate-limit (429), waits 3s and retries once.
+// ─────────────────────────────────────────────────────────────────────────────
+async function groqWithTimeout(params, timeoutMs = 12000) {
+    const attempt = () => Promise.race([
         groq.chat.completions.create(params),
         new Promise((_, reject) =>
             setTimeout(() => reject(new Error('Groq request timed out')), timeoutMs)
         )
     ]);
+
+    try {
+        return await attempt();
+    } catch (err) {
+        if (err?.status === 429 || err?.message?.includes('rate limit') || err?.message?.includes('Rate limit')) {
+            await new Promise(res => setTimeout(res, 3000));
+            return await attempt();
+        }
+        throw err;
+    }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// cleanAIResponse
+//
+// Post-processes raw Groq output before sending to the admin.
+// Strips implementation leakage, fabricated counts, student quotes,
+// internal IDs, and vacuous closing phrases.
+// Falls back to original text if cleaning removes everything.
+// ─────────────────────────────────────────────────────────────────────────────
 function cleanAIResponse(text) {
     if (!text) return text;
+
+    // 1. Meta-opener phrases (loop until none remain)
     const metaPatterns = [
         /^Looking at the conversation history[^.]*\.\s*/i,
         /^Based on the conversation history[^.]*\.\s*/i,
-        /^Based on (the |our )?previous (conversation|messages?|context)[^.]*\.\s*/i,
+        /^Based on the (feedback|data|information|context|results)[^.]*\.\s*/i,
+        /^From the (feedback|data|information|context|results)[^.]*\.\s*/i,
+        /^Looking at the (feedback|data|information|context|results)[^.]*\.\s*/i,
+        /^Reviewing the (feedback|data|information|context|results)[^.]*\.\s*/i,
+        /^According to the (feedback|data|information|context|results)[^.]*\.\s*/i,
         /^Since (the admin|you) (said|replied|answered)[^.]*\.\s*/i,
         /^I (can |will |see |note )(see |that |now )?[^.]*\.\s*/i,
         /^I('ll| will) (now |)deliver[^.]*\.\s*/i,
         /^As (the admin|you) (said|replied|mentioned)[^.]*\.\s*/i,
         /^The admin (has |)(said|replied|mentioned|answered)[^.]*\.\s*/i,
         /^(Looking at|Reviewing|Checking) (the |)(previous |)(history|messages?|context)[^.]*\.\s*/i,
+        /^In (this|the) (analysis|response|answer|summary)[^.]*,\s*/i,
+        /^To (answer|address|respond to) (your|the) (question|request)[^.]*,\s*/i,
+        /^Here('s| is) (a |an |)(summary|overview|breakdown|analysis)[^.]*:\s*/i,
+        /^(Sure|Certainly|Of course|Absolutely)[!,.]?\s*/i,
+        /^(Let me|I will|I'll) (now |)(analyze|summarize|break down|look at)[^.]*\.\s*/i,
     ];
+
     let cleaned = text.trim();
     let changed = true;
     while (changed) {
@@ -53,29 +297,52 @@ function cleanAIResponse(text) {
             if (cleaned !== before) changed = true;
         }
     }
+
+    // 2. Fabricated count references
+    cleaned = cleaned
+        .replace(/\b\d+\s+out\s+of\s+\d+\s+(students?|comments?|responses?|people|participants?|submissions?|entries|feedback)[^.]*/gi, '')
+        .replace(/\b\d+\s+out\s+of\s+\d+\s+student\s+(comments?|responses?|submissions?)[^.]*/gi, '')
+        .replace(/\b(one|two|three|four|five|six|seven|eight|nine|ten)\s+out\s+of\s+(one|two|three|four|five|six|seven|eight|nine|ten)\s+(students?|comments?|responses?|entries|feedback|submissions?)[^.]*/gi, '')
+        .replace(/\b(all|most|some)\s+\d+\s+(entries|feedback|submissions?|comments?|responses?)[^.]*/gi, '')
+        .replace(/\(approximately\s+\d+%[^)]*\)/gi, '')
+        .replace(/approximately\s+\d+%\s+of\s+(the\s+)?(issues?|feedback|students?|complaints?)[^,.]*/gi, '')
+        .replace(/\b\d+%\s+of\s+(the\s+)?(issues?|feedback|students?|complaints?)[^,.]*/gi, '')
+        .trim();
+
+    // 3. Student number references
     cleaned = cleaned
         .replace(/\(\d+\s+students?\)/gi, '')
         .replace(/\(students?\s+[\d,\s]+(and\s+students?\s+\d+)?\)/gi, '')
         .replace(/\bstudents?\s+\d+(?:[\s,]+(and\s+)?students?\s+\d+)*/gi, '')
         .replace(/\b(\d+)\s+students?\s+(report|mention|note|say|state|complain|praise)/gi, 'some students $2')
         .replace(/\bby\s+\d+\s+students?\b/gi, 'by some students')
+        .replace(/\bspecifically,?\s+\d+\s+students?\s+(mentioned|noted|felt|said|suggested)[^.]*/gi, 'some students')
         .replace(/\(\s*\)/g, '')
         .replace(/\s{2,}/g, ' ')
         .replace(/\s+([,.])/g, '$1')
         .replace(/^[,\s]+/, '')
         .trim();
+
+    // 4. Fabricated student quotes
+    cleaned = cleaned
+        .replace(/\b(one|a|another|some)\s+student\s+(said|commented|noted|suggested|mentioned|stated)[^"]*"[^"]*"\s*/gi, '')
+        .replace(/\b(one|a|another|some)\s+student\s+(said|commented|noted|suggested|mentioned|stated)[^']*'[^']*'\s*/gi, '')
+        .replace(/\bAs (one|a|another) student (put it|said|noted|commented)[^.]*\.\s*/gi, '')
+        .trim();
+
+    // 5. Entry and chunk ID references
     cleaned = cleaned
         .replace(/\(Entry\s+\d+\)/gi, '')
         .replace(/\(Entries[\d\s,and]+\)/gi, '')
-        .replace(/\bEntry\s+\d+:/gi, '')
-        .replace(/\bEntry\s+\d+\b/gi, '')
+        .replace(/\bEntry\s+\d+:?/gi, '')
+        .replace(/\bentry\s+\d+\b/gi, '')
         .replace(/\[\d+\]/g, '')
         .trim();
-    cleaned = cleaned
-        .replace(/\b(one|two|three|four|five|\d+)\s+out\s+of\s+(one|two|three|four|five|\d+)\s+(entries|feedback|submissions)[^.]*/gi, '')
-        .replace(/\b(all|most|some)\s+\d+\s+(entries|feedback|submissions)[^.]*/gi, '')
-        .trim();
+
+    // 6. Triple hash markdown artifacts
     cleaned = cleaned.replace(/#{3,}\s*/g, '');
+
+    // 7. Named individuals sections
     cleaned = cleaned
         .replace(/###?\s*People Mentioned[\s\S]*?(?=\n##|\n\*\*→|\nWould you|$)/gi, '')
         .replace(/###?\s*Named Individuals[\s\S]*?(?=\n##|\n\*\*→|\nWould you|$)/gi, '')
@@ -83,952 +350,1350 @@ function cleanAIResponse(text) {
         .replace(/\*\s*None\s*$/i, '')
         .replace(/\bNone\s*$/i, '')
         .trim();
+
+    // 8. Vacuous sentiment sections
     cleaned = cleaned
         .replace(/###?\s*No (Positive|Neutral|Negative)[^#]*/gi, '')
         .replace(/No (positive|neutral|negative) (feedback|observations?)[^.]*\./gi, '')
-        .replace(/No student feedback has been submitted[^.]*that expresses[^.]*/gi, '')
         .trim();
-    cleaned = cleaned.replace(/\s{2,}/g, ' ').replace(/  +/g, ' ').trim();
+
+    // 9. Filler closing sentences
+    cleaned = cleaned
+        .replace(/\bI hope (this|that) (helps?|answers?|clarifies?)[^.]*\.\s*$/gi, '')
+        .replace(/\bLet me know if you (need|want|have)[^.]*\.\s*$/gi, '')
+        .replace(/\bFeel free to (ask|reach out)[^.]*\.\s*$/gi, '')
+        .replace(/\bPlease (let me know|feel free)[^.]*\.\s*$/gi, '')
+        .trim();
+
+    // 10. Final whitespace cleanup
+    cleaned = cleaned.replace(/\s{2,}/g, ' ').trim();
+
     return cleaned || text;
 }
 
-let embeddingPipeline = null;
-async function getEmbeddingPipeline() {
-    if (!embeddingPipeline) {
-        console.log('Loading local embedding model...');
-        const { pipeline } = await import('@xenova/transformers');
-        embeddingPipeline = await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2');
-        console.log('Embedding model loaded ✅');
-    }
-    return embeddingPipeline;
+// ─────────────────────────────────────────────────────────────────────────────
+// enforceFollowUp
+// On non-solution intents, strips any recommendation language that leaked
+// through despite system prompt rules.
+// ─────────────────────────────────────────────────────────────────────────────
+function enforceFollowUp(answer, intent) {
+    if (!answer || intent === 'solution') return answer;
+
+    return answer
+        .replace(/\bIt may help to[^.]*\.\s*$/gi, '')
+        .replace(/\bConsider (reviewing|addressing|looking into)[^.]*\.\s*$/gi, '')
+        .replace(/\bThe university (should|could|may want to)[^.]*\.\s*$/gi, '')
+        .replace(/\bIt (would|might) be (worth|beneficial|helpful)[^.]*\.\s*$/gi, '')
+        .replace(/\bAddressing this (could|would|may)[^.]*\.\s*$/gi, '')
+        .trim();
 }
 
-const ALLOWED_TOPICS = [
-    'feedback','student','complaint','suggestion','improve','experience','teaching','lecture','class','course',
-    'facility','library','hostel','food','canteen','staff','service','support','concern','report','trend','total',
-    'pending','resolved','category','sentiment','negative','positive','neutral','rating','performance','quality',
-    'wifi','internet','transport','parking','admin','today','week','month','year','recent','latest','happening',
-    'issue','problem','worst','best','common','most','least','summary','overview','analysis','compare','urgent',
-    'critical','top','main','key','highlight','insight','how','what','why','which','who','tell','show','give','list'
-];
-
-const CATEGORY_KEYWORDS = {
-    academic:   ['academic','teaching','teacher','lecture','class','course','learning','exam','assignment','marks','grades','tutor','professor','education','subject'],
-    library:    ['library','books','reading','resources','journals','study room','librarian','borrow'],
-    it:         ['wifi','internet','network','computer','lab','technology','system','portal','online','connection','software','hardware'],
-    facilities: ['facility','campus','building','classroom','toilet','bathroom','grounds','sports','gym','field','maintenance','cleaning'],
-    canteen:    ['canteen','food','meal','dining','cafeteria','menu','kitchen','snack','drink'],
-    transport:  ['transport','bus','vehicle','parking','commute','driver','route','schedule','taxi','shuttle','road'],
-    hostel:     ['hostel','room','dormitory','dorm','housing','sleep','bed','warden','residence'],
-    admin:      ['admin','office','registration','fees','payment','documents','finance','enrollment','admission','records']
-};
-
-const SYSTEM_PROMPT = `You are an intelligent university feedback analyst assistant.
-You help university administrators understand what students are experiencing by analyzing real student feedback data.
-
-YOUR IDENTITY:
-- You are an experienced academic affairs analyst at a university
-- You speak directly to university administration not to students
-- You are data-driven: your answers are always grounded in the student feedback provided
-- You are honest, professional, and measured in your language
-
-RESPONSE FORMAT:
-## [Main topic based on the question]
-One clear opening sentence on the overall picture.
-
-**→ [Sub-theme label]**
-Short paragraph about this theme 2-4 sentences.
-
-**⚠️ Key Concern:** Most urgent issue flagged in bold if applicable.
-
-[One follow-up question]
-
-FORMATTING RULES:
-- ## for the main heading ONLY never use ### anywhere
-- **→ Label** for sub-sections bold arrow not hash headings
-- Every **→** sub-section must start on a NEW LINE
-- Use numbered lists only for solutions and recommendations
-- Keep paragraphs short 2-4 sentences max
-
-MOST IMPORTANT RULE:
-- Only include feedback that directly answers that specific topic
-- NEVER pad a response with unrelated feedback
-- If no relevant feedback exists say honestly no feedback submitted about this topic yet
-
-SENTIMENT AWARENESS:
-- Positive = strength Students are happy about X
-- Neutral = observation Students note that X
-- Negative = concern Students are reporting problems with X
-
-EMOTION AWARENESS:
-- angry students = acknowledge urgency first, do not minimise their concern
-- disappointed students = show empathy, note what fell short of expectations  
-- confused students = flag clarity issues, suggest communication improvements
-- excited students = highlight what is working well as a strength
-- hopeful students = note the optimism, treat as constructive feedback
-- satisfied students = flag as positive reinforcement for admin
-
-SOLUTIONS DISCIPLINE:
-- Only give solutions when admin explicitly asks fix improve recommend
-- Analysis questions get analysis only
-
-STUDENT REFERENCING:
-- Never say Student 1 Student 2
-- For multiple: several students some students a number of students
-- For single: a student reported feedback indicates one student noted
-
-ENDING EVERY RESPONSE:
-- Always end with ONE natural follow-up question
-- Never ask multiple questions at the end
-
-WHAT YOU NEVER DO:
-- Never make up feedback not in the data
-- Never use training knowledge to add context not in the data
-- Never write In summary or Overall closing paragraphs
-- Never repeat the same point twice
-- Never reference entry numbers like Entry 1 Entry 2
-- Never show a NAMED INDIVIDUALS heading in your response
-- Only report what is present in the data never what is absent`;
-
+// ─────────────────────────────────────────────────────────────────────────────
+// isGibberish
+// Returns true for inputs that are clearly not real questions.
+// Checked first — avoids any API or DB calls for nonsense input.
+// ─────────────────────────────────────────────────────────────────────────────
 function isGibberish(message) {
-    const trimmed = message.trim();
-    if (trimmed.length < 3) return true;
-    if (/^[^a-zA-Z0-9]+$/.test(trimmed)) return true;
-    if (/^(.)\1{4,}$/.test(trimmed)) return true;
-    const letters = trimmed.replace(/[^a-zA-Z]/g, '');
+    const t = message.trim().toLowerCase();
+
+    const validShortReplies = new Set([
+        'ok', 'no', 'hi', 'hey', 'yes', 'yo', 'k',
+        'why', 'how', 'what', 'who', 'when', 'where'
+    ]);
+    if (validShortReplies.has(t)) return false;
+
+    if (t.length < 3) return true;
+    if (/^[^a-zA-Z0-9]+$/.test(t)) return true;
+    if (/^(.)\1{4,}$/.test(t)) return true;
+    if (/^\d+$/.test(t)) return true;
+
+    const letters = t.replace(/[^a-zA-Z]/g, '');
     if (letters.length > 4) {
-        const vowels = letters.match(/[aeiouAEIOU]/g) || [];
+        const vowels = letters.match(/[aeiou]/g) || [];
         if (vowels.length / letters.length < 0.1) return true;
     }
-    if (/[^aeiou\s]{8,}/i.test(trimmed)) return true;
+    if (/[^aeiou\s]{8,}/i.test(t)) return true;
+
     return false;
 }
 
-function quickRelevanceCheck(message, isFollowUp = false) {
-    const lower = message.toLowerCase().trim();
-    if (ALLOWED_TOPICS.some(t => lower.includes(t))) return true;
-    if (/^(what|how|why|which|who|tell|show|give|are|is|can|do|does|any|were|was).{4,}/i.test(lower)) return true;
-    const singleAcknowledgements = [
-  'ok','okay','alright','sure','fine','noted','got it','i see',
-  'yep','nope','cool','understood','makes sense','right','k',
-  'good','great','nice','thats good',"that's good",'sounds good'
-];
-    if (singleAcknowledgements.includes(lower.trim())) return false;
-    const wordCount = lower.split(/\s+/).filter(w => w.length > 1).length;
-    if (isFollowUp && wordCount >= 2 && lower.length < 50) return true;
-    return false;
+// ─────────────────────────────────────────────────────────────────────────────
+// buildConversationalQuery
+// Wraps a short follow-up with the previous Q&A so the LLM can resolve
+// references like "it" or "this issue" without re-stating.
+// ─────────────────────────────────────────────────────────────────────────────
+function buildConversationalQuery(message, lastContext) {
+    if (!lastContext?.lastQuestion && !lastContext?.lastAnswer) return message;
+    if (message.includes('Previous admin question:')) return message;
+
+    const truncatedAnswer = lastContext.lastAnswer
+        ? lastContext.lastAnswer.slice(0, 600).trim()
+        : '';
+
+    return `
+Previous admin question:
+${lastContext.lastQuestion || ''}
+
+Previous assistant answer:
+${truncatedAnswer}
+
+Current follow-up:
+${message}
+
+Use the previous topic to resolve this follow-up. Do NOT switch topics. Do NOT restate the previous answer — just continue from it.
+`.trim();
 }
 
-async function classifyMessageIntent(message) {
-    try {
-        const result = await groqWithTimeout({
-            model: 'llama-3.1-8b-instant',
-            messages: [{
-                role: 'system',
-                content: `You classify messages sent to a university feedback analysis assistant.
-Respond with ONLY a JSON object no extra text:
-{"relevant": true or false, "type": "feedback_question" or "chit_chat" or "off_topic", "normalised": "the message rewritten in clean English"}`
-            }, { role: 'user', content: message }],
-            max_tokens: 80,
-            temperature: 0.1
-        });
-        const raw = result.choices[0]?.message?.content?.trim() || '{}';
-        return JSON.parse(raw.replace(/```json|```/g, '').trim());
-    } catch (err) {
-        console.error('Classification error:', err.message);
-        return { relevant: true, type: 'feedback_question', normalised: message };
-    }
-}
 
-async function isRelevantQuestion(message, isFollowUp = false) {
-    if (quickRelevanceCheck(message, isFollowUp)) {
-        return { relevant: true, type: 'feedback_question', normalised: message };
-    }
-    return await classifyMessageIntent(message);
-}
+/* ═══════════════════════════════════════════════════════════════════════════
+   SECTION 2 — DETECTION HELPERS
+═══════════════════════════════════════════════════════════════════════════ */
 
+// ─────────────────────────────────────────────────────────────────────────────
+// detectChitChat
+// Returns a classification string for social/non-analytical messages, or null.
+// ─────────────────────────────────────────────────────────────────────────────
 function detectChitChat(message) {
     const lower = message.toLowerCase().trim();
-    if (/(^hi$|^hello$|^hey$|good morning|good afternoon|good evening|good day)/i.test(lower)) return 'greeting';
-    if (/(thanks|thank you|thx|appreciate|great|awesome|perfect|well done)/i.test(lower)) return 'gratitude';
-    if (/(how are you|how r u|you okay|you good)/i.test(lower)) return 'status';
-    if (/(who are you|what are you|what can you do|your name|introduce yourself)/i.test(lower)) return 'identity';
-    if (/(^ok$|^okay$|^alright$|^got it$|^i see$|^noted$|^sure$|^fine$|^yep$|^nope$|^cool$|^understood$|^makes sense$)/i.test(lower)) return 'acknowledgement';
-    if (/(^yes$|^no$|^yeah$|^nah$)/i.test(lower)) return 'yes_no';
+
+    if (/^(hi|hello|hey|good morning|good afternoon|good evening|good night|good day)[!. ]*$/.test(lower)) return 'greeting';
+    if (/(^bye$|^goodbye$|see you|see ya|later|talk to you later|catch you later|bye bye)/.test(lower)) return 'farewell';
+    if (/(thanks|thank you|thx|appreciate|great work|well done)/.test(lower)) return 'gratitude';
+    if (/(how are you|how r u|you okay|you good)/.test(lower)) return 'status';
+    if (/(who are you|what are you|what can you do|your name|introduce yourself)/.test(lower)) return 'identity';
+    if (/^(ok|okay|alright|got it|i see|noted|sure|fine|yep|nope|cool|understood|makes sense|right|k|good|great|nice|sounds good)\.?$/i.test(lower)) return 'acknowledgement';
+    if (/^(yes|no|yeah|nah)\.?$/i.test(lower)) return 'yes_no';
+
     return null;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Greeting helpers
+// ─────────────────────────────────────────────────────────────────────────────
+function getTimeGreeting(hour = new Date().getHours()) {
+    if (hour >= 5  && hour < 12) return 'morning';
+    if (hour >= 12 && hour < 17) return 'afternoon';
+    if (hour >= 17 && hour < 22) return 'evening';
+    return 'night';
+}
+
+function getUserGreetingType(message = '') {
+    const lower = message.toLowerCase().trim();
+    if (/good morning/.test(lower))   return 'morning';
+    if (/good afternoon/.test(lower)) return 'afternoon';
+    if (/good evening/.test(lower))   return 'evening';
+    if (/good night/.test(lower))     return 'night';
+    if (/^(hi|hello|hey)[!. ]*$/.test(lower)) return 'generic';
+    return null;
+}
+
+function buildGreetingReply(message = '') {
+    const actual = getTimeGreeting();
+    const userGreeting = getUserGreetingType(message);
+
+    const labels = {
+        morning: 'Good morning', afternoon: 'Good afternoon',
+        evening: 'Good evening', night: 'Good night', generic: 'Hello'
+    };
+    const mismatchMessages = {
+        morning: "It's already later in the day",
+        afternoon: 'A little early for "good afternoon"',
+        evening: "It's not evening yet",
+        night: 'Not quite night yet'
+    };
+
+    const actualGreeting = labels[actual] || 'Hello';
+
+    if (!userGreeting || userGreeting === 'generic' || userGreeting === actual) {
+        return `${actualGreeting}. How can I help you analyze student feedback today?`;
+    }
+    return `${actualGreeting}. ${mismatchMessages[userGreeting]}, but I'm ready to help you analyze student feedback.`;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// detectIntent
+// Classifies the admin's question into one of six types.
+// ─────────────────────────────────────────────────────────────────────────────
 function detectIntent(message) {
     const lower = message.toLowerCase();
-    if (/(how many|total|count|number of|how much|percentage|ratio|statistics|stats)/i.test(lower)) return 'quick';
-    if (/(solution|recommend|action|improve|suggest|fix|resolve|address|what should|how can|how do we|what do i do|what should i do|what can i do|what can be done|what to do)/i.test(lower)) return 'solution';
-    if (/(is (now |already |been )?solved|has been (fixed|resolved|addressed|sorted)|is fixed|is resolved|issue is gone|we (have |)fixed|we (have |)resolved|mark(ed)? (as |)resolved|close this|close the issue)/i.test(lower)) return 'resolved';
+
+    if (/(bad response|not good|poor response|rewrite|rephrase|regenerate|generate another|another version|make it better|improve this answer|different version|not as before)/i.test(lower)) return 'rewrite';
+    if (/(categories|themes|topics|main issues|most talked|most common|common issues|patterns|trends|recurring issues|major concerns|key concerns)/i.test(lower)) return 'aggregation';
+    if (/(how many|total|count|number of|how much|percentage|ratio|statistics|stats|figures|metrics)/i.test(lower)) return 'quick';
+    if (/(solution|solutions|recommend|recommendation|what can we (actually |)do|what do we do about|how do we fix|what should be done|action|actions|improve|improvement|suggest|suggestion|fix|solve|resolve|address|handle|deal with|way forward|next step|next steps|what should|what can|how can|how do we|what do we do|what should i do|what should we do|what can be done|what to do|possible response|admin response|intervention|interventions)/i.test(lower)) return 'solution';
+    if (/(is (now |already |been )?solved|has been (fixed|resolved|addressed)|is fixed|is resolved|we (have |)fixed|we (have |)resolved|mark(ed)? (as |)resolved|closed|completed|done)/i.test(lower)) return 'resolved';
+
     return 'analysis';
 }
 
-function detectResolutionCategory(message) {
+// ─────────────────────────────────────────────────────────────────────────────
+// detectResponseMode
+// Secondary classification affecting formatting, independent of intent.
+// ─────────────────────────────────────────────────────────────────────────────
+function detectResponseMode(message) {
     const lower = message.toLowerCase();
-    for (const [cat, keywords] of Object.entries(CATEGORY_KEYWORDS)) {
-        if (keywords.some(kw => new RegExp(`\\b${kw.replace(/[-\/]/g,'\\$&')}\\b`, 'i').test(lower))) return cat;
-    }
-    return null;
+    if (/(today|recent|overview|summary|summarize|summarise|summerize|what are students saying|what students are saying|what's happening)/i.test(lower)) return 'briefing';
+    if (/(analyze|analysis|insight|patterns|themes|why|what does this suggest)/i.test(lower)) return 'deep_analysis';
+    if (/(how many|count|number of|total|stats|percentage)/i.test(lower)) return 'quick_fact';
+    return 'standard';
 }
 
-function detectCategory(message) {
-    const lower = message.toLowerCase();
-    for (const [cat, keywords] of Object.entries(CATEGORY_KEYWORDS)) {
-        if (keywords.some(kw => new RegExp(`\\b${kw.replace(/[-\/]/g,'\\$&')}\\b`, 'i').test(lower))) return cat;
-    }
-    return null;
-}
-
+// ─────────────────────────────────────────────────────────────────────────────
+// detectDateRange
+// Parses time expressions from the admin's message.
+// Returns { start, end?, label } or null.
+// ─────────────────────────────────────────────────────────────────────────────
 function detectDateRange(message) {
     const lower = message.toLowerCase();
-    const now = new Date();
-    if (lower.includes('today')) return { start: new Date(new Date().setHours(0,0,0,0)), label: 'today' };
-    if (lower.includes('this week') || lower.includes('last 7 days')) { const s=new Date(); s.setDate(now.getDate()-7); return { start:s, label:'this week' }; }
-    if (lower.includes('last week')) { const s=new Date(); s.setDate(now.getDate()-14); const e=new Date(); e.setDate(now.getDate()-7); return { start:s,end:e,label:'last week' }; }
-    if (lower.includes('this month')) return { start:new Date(now.getFullYear(),now.getMonth(),1), label:'this month' };
-    if (lower.includes('last month')) return { start:new Date(now.getFullYear(),now.getMonth()-1,1), end:new Date(now.getFullYear(),now.getMonth(),1), label:'last month' };
-    if (lower.includes('this year')) return { start:new Date(now.getFullYear(),0,1), label:'this year' };
-    if (lower.includes('recent')||lower.includes('latest')||lower.includes('happening')) { const s=new Date(); s.setDate(now.getDate()-30); return { start:s, label:'recently (last 30 days)' }; }
-    const m = lower.match(/last (\d+)\s*days?/);
-    if (m) { const n=parseInt(m[1],10); if(!isNaN(n)&&n>0){ const s=new Date(); s.setDate(s.getDate()-n); return { start:s, label:`last ${n} days` }; } }
+    const now   = new Date();
+
+    if (lower.includes('today')) {
+        return { start: new Date(new Date().setHours(0, 0, 0, 0)), label: 'today' };
+    }
+    if (lower.includes('this week') || lower.includes('last 7 days')) {
+        const s = new Date(); s.setDate(now.getDate() - 7);
+        return { start: s, label: 'this week' };
+    }
+    if (lower.includes('two weeks') || lower.includes('2 weeks')) {
+        const s = new Date(); s.setDate(now.getDate() - 14);
+        return { start: s, label: 'last 14 days' };
+    }
+    if (lower.includes('last week')) {
+        const s = new Date(); s.setDate(now.getDate() - 14);
+        const e = new Date(); e.setDate(now.getDate() - 7);
+        return { start: s, end: e, label: 'last week' };
+    }
+    if (lower.includes('this month')) {
+        return { start: new Date(now.getFullYear(), now.getMonth(), 1), label: 'this month' };
+    }
+    if (lower.includes('last month')) {
+        return {
+            start: new Date(now.getFullYear(), now.getMonth() - 1, 1),
+            end:   new Date(now.getFullYear(), now.getMonth(), 1),
+            label: 'last month'
+        };
+    }
+    if (lower.includes('this year')) {
+        return { start: new Date(now.getFullYear(), 0, 1), label: 'this year' };
+    }
+    if (lower.includes('recent') || lower.includes('latest') || lower.includes('happening')) {
+        const s = new Date(); s.setDate(now.getDate() - 30);
+        return { start: s, label: 'recently (last 30 days)' };
+    }
+    const match = lower.match(/last (\d+)\s*days?/);
+    if (match) {
+        const n = parseInt(match[1], 10);
+        if (!isNaN(n) && n > 0) {
+            const s = new Date(); s.setDate(s.getDate() - n);
+            return { start: s, label: `last ${n} days` };
+        }
+    }
     return null;
 }
 
-async function generateEmbedding(text) {
-    try {
-        const safeText = text.slice(0, MAX_TEXT_LENGTH);
-        const pipe = await getEmbeddingPipeline();
-        const output = await pipe(safeText, { pooling:'mean', normalize:true });
-        return Array.from(output.data);
-    } catch(err) { console.error('Embedding error:', err.message); return []; }
-}
-
-async function generateAIResponse(prompt, history=[], systemPrompt=null) {
-    try {
-        const messages = [
-            { role: 'system', content: systemPrompt || SYSTEM_PROMPT },
-            ...history.map(h => ([
-                { role: 'user',      content: h.question },
-                { role: 'assistant', content: h.answer   }
-            ])).flat(),
-            { role: 'user', content: prompt }
-        ];
-        const result = await groqWithTimeout({
-            model: 'llama-3.1-8b-instant',
-            messages,
-            max_tokens: 1200,
-            temperature: 0.4
-        });
-        return cleanAIResponse(result.choices[0]?.message?.content?.trim() || '');
-    } catch(err) {
-        console.error('AI error:', err.message);
-        return "I'm having trouble processing that right now. Please try again.";
-    }
-}
-
-// ── getStats — uses Resolution model for resolved count (status removed from Feedback) ──
-async function getStats() {
-    const [total, resolved, categoryStats] = await Promise.all([
-        Feedback.countDocuments(),
-        Resolution.countDocuments({ isPublished: true }),
-        Feedback.aggregate([{ $group:{ _id:'$category', count:{ $sum:1 } } }, { $sort:{ count:-1 } }])
-    ]);
-    return { total, pending: 0, resolved, categoryStats };
-}
-
-function extractNames(text) {
-    const names = [];
-    const titledPattern = /\b(Dr\.?|Prof\.?|Professor|Mr\.?|Mrs\.?|Ms\.?|Sir)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)/g;
-    let match;
-    while ((match = titledPattern.exec(text)) !== null) {
-        const name = match[0].trim();
-        if (!names.includes(name)) names.push(name);
-    }
-    const contextPattern = /\b([A-Z][a-z]{2,})\s+(is|was|has|never|always|keeps|does|did|teaches|taught|handles|managed|runs|told|said|came|comes|cancels|rushes|reads|explains|helps|helped)/g;
-    const commonWords = new Set(['The','This','These','Those','Some','Many','Most','All','Students','Student','University','Department','Faculty','Staff','Admin','Class','Course','Exam','Library','Canteen','Hostel','Transport','WiFi','Internet','Campus','Building','Room','Office','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday','January','February','March','April','May','June','July','August','September','October','November','December']);
-    while ((match = contextPattern.exec(text)) !== null) {
-        const name = match[1].trim();
-        if (!commonWords.has(name) && !names.some(n => n.includes(name))) names.push(name);
-    }
-    const namedPattern = /\b(?:lecturer|teacher|tutor|warden|manager|staff|driver|librarian)\s+(?:named|called)?\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)/gi;
-    while ((match = namedPattern.exec(text)) !== null) {
-        const name = match[1].trim();
-        if (!names.some(n => n.includes(name))) names.push(name);
-    }
-    return names;
-}
-
-function filterResultsByTopic(results, message) {
+// ─────────────────────────────────────────────────────────────────────────────
+// isTimeSummaryQuery
+// Returns true only when there is a date range AND no specific topic.
+// Those go to Mode A (MongoDB date query) instead of Mode B (FAISS).
+// ─────────────────────────────────────────────────────────────────────────────
+function isTimeSummaryQuery(message, dateRange, queryHints = []) {
+    if (!dateRange) return false;
     const lower = message.toLowerCase();
-    const words = lower.split(/\s+/).filter(w => w.length > 3);
-    const filtered = results.filter(r => {
-        const text = (r.feedback + ' ' + (r.evidenceText || '') + ' ' + (r.category || '')).toLowerCase();
-        return words.some(word => text.includes(word));
-    });
-    return filtered.length > 0 ? filtered : results;
+    const mentionsTopic = /\b(about|regarding|on)\b/.test(lower) && queryHints.length > 0;
+    return !mentionsTopic;
 }
 
-function buildContext(results) {
-    return results.map((doc, i) => {
-       let entry = `[${i+1}] [${doc.category}|${doc.sentiment}|${doc.emotion||'neutral_emotion'}] ${doc.feedback}`;
-        if (doc.evidenceText) entry += `\n  Evidence: ${doc.evidenceText.slice(0,300)}`;
-        const names = extractNames(doc.feedback + (doc.evidenceText || ''));
-        if (names.length > 0) entry += `\n  People mentioned: ${names.join(', ')}`;
-        return entry;
-    }).join('\n\n').slice(0, 3000);
+// ─────────────────────────────────────────────────────────────────────────────
+// isShortFollowUp
+// Returns true if the message looks like a follow-up rather than a new question.
+// ─────────────────────────────────────────────────────────────────────────────
+function isShortFollowUp(message) {
+    const lower = message.toLowerCase().trim();
+    const words = lower.split(/\s+/).filter(Boolean);
+
+    if (words.length <= 4 && /^(why|how|what|which|where|when|who|now|next|any|best|way)\b/i.test(lower)) return true;
+    if (/^(why|how|what|which|where|when|who|and|then|also|continue|explain|tell|show)\b/i.test(lower)) return true;
+    if (/\b(it|this|that|they|them|those|these|one|ones|issue|problem|problems|solution|solutions)\b/i.test(lower)) return true;
+
+    return false;
 }
 
-function buildNamedPersonsSummary(results) {
-    const allNames = {};
-    results.forEach(doc => {
-        const names = extractNames(doc.feedback + (doc.evidenceText || ''));
-        names.forEach(name => {
-            if (!allNames[name]) allNames[name] = { positive: 0, negative: 0, neutral: 0, snippets: [] };
-            const s = (doc.sentiment || 'neutral').toLowerCase();
-            allNames[name][s] = (allNames[name][s] || 0) + 1;
-            const snippet = doc.feedback.slice(0, 120);
-            if (!allNames[name].snippets.includes(snippet)) allNames[name].snippets.push(snippet);
-        });
-    });
-    if (Object.keys(allNames).length === 0) return null;
-    return Object.entries(allNames).map(([name, data]) => {
-        const label = data.negative > 0 ? 'concerns raised' : data.positive > 0 ? 'positive feedback' : 'observations noted';
-        return `• ${name} — ${label}: "${data.snippets[0]}..."`;
-    }).join('\n');
-}
-
-function buildPrompt(message, context, dateLabel, categoryLabel, intent='analysis', sentimentSummary=null,emotionSummary=null, namedPersonsSummary=null, resultCount=0) {
-    const scope = [
-        categoryLabel ? `Category: ${categoryLabel}` : null,
-        dateLabel     ? `Time period: ${dateLabel}`   : null
-    ].filter(Boolean).join(' | ');
-
-    const intentInstructions = {
-        quick:    `Give a direct answer in 1-2 sentences. Lead with the fact or number asked for. No headings needed for quick facts.`,
-        analysis: `Structure your response using ## heading and **→ Label** sub-sections. ONLY report feedback directly about the topic asked. End with one follow-up question.`,
-        solution: `Start with ## Solutions for [topic]. Then list numbered recommended actions. Be specific and realistic.`,
-        resolved: `Acknowledge in 1-2 sentences that the issue is noted as resolved. No headings needed.`
-    };
-
-    const sentimentContext = sentimentSummary
-        ? `Sentiment breakdown: ${sentimentSummary}\nFrame response based on sentiment — positive = strength, neutral = observation, negative = concern.`
-        : '';
-    const emotionContext = emotionSummary
-        ? `Emotional breakdown: ${emotionSummary}\nConsider the emotional state of students when framing your response — angry students need urgency acknowledged, hopeful students need encouragement, disappointed students need empathy.`
-        : '';
-
-    const namedSection = namedPersonsSummary
-        ? `\nNAMED INDIVIDUALS IN THIS FEEDBACK:\n${namedPersonsSummary}\n`
-        : '';
-
-    return `You are analyzing real student feedback submitted to the university suggestion box.
-${scope ? `Scope: ${scope}` : 'Scope: All feedback'}
-Admin question: "${message}"
-CRITICAL: Only use entries directly relevant to the question. Ignore unrelated entries.
-You have ${resultCount} entries below.
-${sentimentContext}
-${emotionContext}
-${namedSection}
-Student Feedback Data:
-${context}
-Instructions:
-- Only report feedback directly related to what was asked
-- If no entries match say no feedback submitted about this topic yet
-- Use ## for main heading **→ Label** for sub-sections
-- Every claim must come from the entries above no training knowledge
-- ${intentInstructions[intent] || intentInstructions.analysis}`;
-}
-
-// ── Build broad summary prompt using aggregated stats ─────────────────────────
-// Used when admin asks about all categories at once
-// Works with any number of feedbacks since we aggregate in MongoDB first
-function buildBroadPrompt(message, categoryAggregation, samplesByCategory, totalFeedback) {
-    const structuredContext = categoryAggregation.map((cat, i) => {
-        const samples = samplesByCategory[i] || [];
-        const sampleText = samples.map(s => `  - "${s.feedback.slice(0, 150)}"`).join('\n');
-        return `[${(cat._id || 'unknown').toUpperCase()}] Total: ${cat.total} | Positive: ${cat.positive} | Neutral: ${cat.neutral} | Negative: ${cat.negative}
-Representative samples:
-${sampleText || '  - No samples available'}`;
-    }).join('\n\n');
-
-    return `You are analyzing a complete summary of ALL student feedback across all university departments.
-Total feedback in system: ${totalFeedback}
-Categories analyzed: ${categoryAggregation.length}
-
-STRUCTURED DATA PER CATEGORY (aggregated from full database):
-${structuredContext}
-
-Admin question: "${message}"
-
-Write a comprehensive summary covering ALL categories above.
-
-Format:
-## University Feedback Overview
-One sentence on the overall picture across all ${totalFeedback} submissions.
-
-For EACH category that has feedback:
-**→ [Category Name]** (X total submissions)
-2-3 sentences: dominant sentiment, main theme from samples, urgency level.
-
-**⚠️ Most Urgent:** The category with highest negative count flagged here.
-
-End with: "Would you like a detailed breakdown of any specific category?"
-
-RULES:
-- Cover every category listed above
-- Base all numbers on the aggregated data provided
-- Do not invent feedback not in the samples
-- Keep each category section to 2-3 sentences max
-- Be direct and professional`;
-}
-
-async function runVectorSearch(questionEmbedding, detectedCategory, dateRange) {
-    if (dateRange) {
-        const dateFilter = {
-            createdAt: { $gte: dateRange.start, ...(dateRange.end && { $lte: dateRange.end }) },
-            ...(detectedCategory && { category: detectedCategory })
-        };
-        const countInPeriod = await Feedback.countDocuments(dateFilter);
-        if (countInPeriod === 0) {
-            return { results: [], usedFallback: false, emptyPeriod: true, dateRange };
-        }
-    }
-
-    const pipeline = [
-        { $vectorSearch: {
-            index: 'feedback_vector_index',
-            queryVector: questionEmbedding,
-            path: 'embedding',
-            similarity: 'cosine',
-            numCandidates: 500,
-            limit: 50,
-            ...(detectedCategory && { filter: { category: { $eq: detectedCategory } } })
-        }},
-        { $addFields: { score: { $meta: 'vectorSearchScore' } } },
-       { $project: { feedback:1, category:1, summary:1, sentiment:1, emotion:1, evidenceText:1, createdAt:1, score:1 } }
-    ];
-
-    let results = await Feedback.aggregate(pipeline);
-
-    if (results.length && !detectedCategory && !dateRange) {
-        const topScore = results[0]?.score || 0;
-        if (topScore < 0.45) {
-            console.log(`Low relevance (${topScore.toFixed(3)}) — topic not in database`);
-            return { results: [], usedFallback: false, emptyPeriod: false, topicMismatch: true };
-        }
-    }
-
-    if (dateRange && results.length) {
-        results = results.filter(doc => {
-            const created = new Date(doc.createdAt);
-            return dateRange.end
-                ? created >= dateRange.start && created <= dateRange.end
-                : created >= dateRange.start;
-        });
-    }
-
-    results = results.slice(0, 15);
-
-    if (!results.length && dateRange) {
-        const dateFilter = {
-            createdAt: { $gte: dateRange.start, ...(dateRange.end && { $lte: dateRange.end }) },
-            ...(detectedCategory && { category: detectedCategory })
-        };
-        results = await Feedback.find(dateFilter)
-            .sort({ createdAt: -1 }).limit(15)
-            .select('feedback category summary sentiment evidenceText createdAt');
-        return { results, usedFallback: true, emptyPeriod: false };
-    }
-
-    if (!results.length && (detectedCategory || dateRange)) {
-        const broadResults = await Feedback.aggregate([
-            { $vectorSearch: { index:'feedback_vector_index', queryVector:questionEmbedding, path:'embedding', similarity:'cosine', numCandidates:200, limit:15 } },
-            { $addFields: { score: { $meta: 'vectorSearchScore' } } },
-           { $project: { feedback:1, category:1, summary:1, sentiment:1, emotion:1, evidenceText:1, createdAt:1, score:1 } }
-        ]);
-        return { results: broadResults, usedFallback: true, emptyPeriod: false };
-    }
-
-    return { results, usedFallback: false, emptyPeriod: false };
-}
-
-// ── Check if query is broad (asking about all categories) ─────────────────────
-function isBroadSummaryQuery(cleanMessage, detectedCategory, dateRange) {
-    if (detectedCategory || dateRange) return false;
-    return /all categor|every categor|each categor|overall summary|all feedback|everything|across all|full overview|complete summary|all areas|all departments|all sections|university overview/i.test(cleanMessage);
-}
-
-// ── Fetch aggregated data for broad queries ───────────────────────────────────
-async function fetchBroadData() {
-    const categoryAggregation = await Feedback.aggregate([
-        { $group: {
-            _id: '$category',
-            total:    { $sum: 1 },
-            positive: { $sum: { $cond: [{ $eq: ['$sentiment', 'positive'] }, 1, 0] } },
-            neutral:  { $sum: { $cond: [{ $eq: ['$sentiment', 'neutral']  }, 1, 0] } },
-            negative: { $sum: { $cond: [{ $eq: ['$sentiment', 'negative'] }, 1, 0] } },
-        }},
-        { $sort: { total: -1 } }
+// ─────────────────────────────────────────────────────────────────────────────
+// extractQueryHints
+// Pulls meaningful topic words out of the admin's question for soft filtering.
+// ─────────────────────────────────────────────────────────────────────────────
+function extractQueryHints(message) {
+    const stopWords = new Set([
+        'what', 'how', 'why', 'when', 'where', 'which', 'about', 'are',
+        'students', 'student', 'saying', 'says', 'tell', 'show', 'give',
+        'please', 'this', 'that', 'with', 'from', 'into', 'the', 'a', 'an',
+        'and', 'or', 'is', 'was', 'were', 'have', 'has', 'had', 'do', 'does',
+        'did', 'can', 'could', 'would', 'should', 'will', 'any', 'some',
+        'most', 'more', 'less', 'all', 'no', 'not', 'also', 'just', 'very',
+        'for', 'by', 'at', 'in', 'on', 'of', 'to', 'me', 'us', 'you'
     ]);
-
-    const categories = categoryAggregation.map(c => c._id).filter(Boolean);
-    const samplesByCategory = await Promise.all(
-        categories.map(cat =>
-            Feedback.find({ category: cat })
-                .sort({ createdAt: -1 })
-                .limit(3)
-                .select('feedback category sentiment createdAt')
-        )
-    );
-
-    const totalFeedback = categoryAggregation.reduce((sum, c) => sum + c.total, 0);
-    return { categoryAggregation, samplesByCategory, totalFeedback };
+    return message
+        .toLowerCase()
+        .split(/\s+/)
+        .map(w => w.replace(/[^a-z0-9]/g, ''))
+        .filter(w => w.length > 2 && !stopWords.has(w));
 }
 
-const CHIT_CHAT_PROMPTS = {
-        get greeting() {
-        const hour = new Date().getHours();
-        const timeOfDay = hour < 12 ? 'morning' : hour < 17 ? 'afternoon' : 'evening';
-        return `Reply in one short sentence. Start with "Good ${timeOfDay}." Then say you are ready to help with student feedback. No extra warmth, no fluff.`;
-    },
-    gratitude:       `The admin just thanked you. Respond naturally and briefly. Keep it to 1 sentence.`,
-    status:          `The admin asked how you are. Respond in a friendly, light way and redirect to helping with student feedback. Keep it to 1-2 sentences.`,
-    identity:        `The admin is asking who you are. Briefly explain that you are an AI feedback analyst for their university suggestion box system. Keep it to 2-3 sentences.`,
-    acknowledgement: `The admin acknowledged your previous message with a short word like ok or okay. Respond in one short sentence only. Ask if they want to explore anything else. Do not repeat anything.`,
-    yes_no: `The admin said yes. Look at the conversation history and continue directly from where you left off. Start your response with the actual content immediately. No intro sentences. No "Sure". No "Of course". Just the content.
-If the admin said NO: respond with one short sentence like "No problem! Feel free to ask anything else."`
-};
+// ─────────────────────────────────────────────────────────────────────────────
+// normalizeQueryForIntent
+// Wraps the current message with prior context for the embedding call.
+// Prevents double-wrapping.
+// ─────────────────────────────────────────────────────────────────────────────
+function normalizeQueryForIntent(message, lastContext = null) {
+    if (message.includes('Previous admin question')) return message;
+    if (!lastContext) return message;
 
+    return `
+Previous question:
+${lastContext.lastQuestion || ''}
+
+Previous answer:
+${lastContext.lastAnswer || ''}
+
+Current question:
+${message}
+
+Answer the current question in the context of the previous topic.
+`.trim();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// isExpansionRequest
+// Detects when the admin wants more detail on the previous answer.
+// ─────────────────────────────────────────────────────────────────────────────
+function isExpansionRequest(message) {
+    return /(more details|more detail|explain more|go deeper|expand|elaborate|tell me more|more info|make it (shorter|clearer|simpler|better)|break it down|just list|list them|list it|list down|what else|what other|any other|others)/i.test(message);
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   SECTION 3 — SESSION HELPERS
+═══════════════════════════════════════════════════════════════════════════ */
+
+// ─────────────────────────────────────────────────────────────────────────────
+// loadSession
+// Finds or creates a ChatSession. Returns { session, history }.
+// If no sessionId, returns { session: null, history: [] }.
+// ─────────────────────────────────────────────────────────────────────────────
 async function loadSession(sessionId) {
     if (!sessionId) return { session: null, history: [] };
     let session = await ChatSession.findOne({ sessionId });
-    if (session) return { session, history: session.messages.slice(-10) };
+    if (session) return { session, history: session.messages.slice(-4) };
     session = new ChatSession({ sessionId });
     return { session, history: [] };
 }
 
-/* ═══════════════════════════════════════════════════════════
-   ROUTES
-═══════════════════════════════════════════════════════════ */
+// ─────────────────────────────────────────────────────────────────────────────
+// getLastAssistantContext
+// Returns the last { lastQuestion, lastAnswer } pair from session history.
+// ─────────────────────────────────────────────────────────────────────────────
+function getLastAssistantContext(history = []) {
+    if (!history.length) return null;
+    const last = history[history.length - 1];
+    if (!last) return null;
+    return { lastQuestion: last.question || '', lastAnswer: last.answer || '' };
+}
 
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   SECTION 4 — STATS
+═══════════════════════════════════════════════════════════════════════════ */
+
+// ─────────────────────────────────────────────────────────────────────────────
+// getStats
+// Returns total submissions, resolved count, and top 10 tags.
+// Uses only real schema fields — no Feedback.category.
+// ─────────────────────────────────────────────────────────────────────────────
+async function getStats() {
+    const [total, resolved, topTagsRaw] = await Promise.all([
+        Feedback.countDocuments(),
+        Resolution.countDocuments({ isPublished: true }),
+        Feedback.aggregate([
+            { $unwind: '$tags' },
+            { $group: { _id: '$tags', count: { $sum: 1 } } },
+            { $sort: { count: -1 } },
+            { $limit: 10 }
+        ])
+    ]);
+    return { total, resolved, topTags: topTagsRaw };
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   SECTION 5 — CONTEXT BUILDERS
+═══════════════════════════════════════════════════════════════════════════ */
+
+// ─────────────────────────────────────────────────────────────────────────────
+// buildFeedbackSummaryContext
+// Used in Mode A (time-based) and aggregation intent.
+// Converts Feedback documents → multi-line text for LLM.
+// ─────────────────────────────────────────────────────────────────────────────
+function buildFeedbackSummaryContext(feedbackDocs) {
+    return feedbackDocs.map(doc => {
+        const tagStr  = (doc.tags || []).join(', ') || 'untagged';
+        const sentStr = doc.sentiment || 'unknown';
+        const emoStr  = doc.emotion   || 'neutral';
+        const text    = doc.evidenceText
+            ? `${doc.feedback} [Evidence: ${doc.evidenceText.slice(0, 200)}]`
+            : doc.feedback;
+        return `[${sentStr}|${emoStr}|tags: ${tagStr}] ${text}`;
+    }).join('\n\n').slice(0, 4000);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// buildChunkContext
+// Used in Mode B (semantic FAISS queries).
+// Converts FeedbackChunk documents → multi-line text for LLM.
+// ─────────────────────────────────────────────────────────────────────────────
+function buildChunkContext(chunks) {
+    return chunks.map(chunk => {
+        const sentStr = chunk.sentiment || 'unknown';
+        const emoStr  = chunk.emotion   || 'neutral';
+        return `[${sentStr}|${emoStr}] ${chunk.chunkText}`;
+    }).join('\n\n').slice(0, 4000);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// softFilterChunkResults
+// After FAISS retrieves chunks, loosely prefers chunks whose text/tags/topic
+// contains words from the admin's question.
+// "Soft" means: if filtering removes everything, we return all results.
+// ─────────────────────────────────────────────────────────────────────────────
+function softFilterChunkResults(chunks, queryHints, detectedCategory = null) {
+    if (!queryHints || !queryHints.length) return chunks;
+    const filtered = chunks.filter(chunk => {
+        const haystack = [
+            chunk.chunkText || '',
+            (chunk.tags || []).join(' '),
+            chunk.topicLabel || '',
+            chunk.topicShortLabel || '',
+            detectedCategory?.label || '',
+            detectedCategory?.shortLabel || ''
+        ].join(' ').toLowerCase();
+        return queryHints.some(hint => haystack.includes(hint));
+    });
+    return filtered.length > 0 ? filtered : chunks;
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   SECTION 6 — RETRIEVAL MODES
+═══════════════════════════════════════════════════════════════════════════ */
+
+// ─────────────────────────────────────────────────────────────────────────────
+// runTimeSummarySearch  (Mode A)
+// For pure time-based questions with no specific topic.
+// Queries MongoDB by createdAt. Returns up to 80 Feedback docs.
+// ─────────────────────────────────────────────────────────────────────────────
+async function runTimeSummarySearch(dateRange) {
+    const dateFilter = { createdAt: { $gte: dateRange.start } };
+    if (dateRange.end) dateFilter.createdAt.$lte = dateRange.end;
+    return Feedback.find(dateFilter)
+        .sort({ createdAt: -1 })
+        .limit(80)
+        .select('feedback evidenceText tags topicLabel sentiment emotion createdAt');
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// getTopCategories
+// Returns top 5 topicLabels by count, with negative sentiment counts.
+// Used in the aggregation intent.
+// ─────────────────────────────────────────────────────────────────────────────
+async function getTopCategories(dateRange) {
+    const match = {};
+    if (dateRange) {
+        match.createdAt = { $gte: dateRange.start };
+        if (dateRange.end) match.createdAt.$lte = dateRange.end;
+    }
+    return Feedback.aggregate([
+        { $match: match },
+        {
+            $group: {
+                _id: '$topicLabel',
+                topicShortLabel: { $first: '$topicShortLabel' },
+                count: { $sum: 1 },
+                negativeCount: {
+                    $sum: { $cond: [{ $eq: ['$sentiment', 'negative'] }, 1, 0] }
+                }
+            }
+        },
+        { $sort: { count: -1 } },
+        { $limit: 5 }
+    ]);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// applyCategoryBoost
+// Boosts chunk scores when their topicLabel matches the detected category.
+// ─────────────────────────────────────────────────────────────────────────────
+function applyCategoryBoost(scoredChunks, detectedCategory = null) {
+    if (!detectedCategory) return scoredChunks;
+
+    const categoryText = [
+        detectedCategory.label || '',
+        detectedCategory.shortLabel || ''
+    ].join(' ').toLowerCase();
+
+    return scoredChunks
+        .map(chunk => {
+            const chunkTopicText = [
+                chunk.topicLabel || '',
+                chunk.topicShortLabel || ''
+            ].join(' ').toLowerCase();
+
+            const topicMatches = categoryText && chunkTopicText && (
+                categoryText.includes(chunk.topicShortLabel?.toLowerCase() || '') ||
+                chunkTopicText.includes(detectedCategory.shortLabel?.toLowerCase() || '') ||
+                chunkTopicText.includes(detectedCategory.label?.toLowerCase() || '')
+            );
+
+            return { ...chunk, score: topicMatches ? chunk.score + 0.08 : chunk.score };
+        })
+        .sort((a, b) => b.score - a.score);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// applySentimentBoost
+// Boosts negative/high-emotion chunks so they surface first.
+// ─────────────────────────────────────────────────────────────────────────────
+function applySentimentBoost(scoredChunks) {
+    return scoredChunks
+        .map(chunk => {
+            let boost = 0;
+            if ((chunk.sentiment || '').toLowerCase() === 'negative') boost += 0.05;
+            const emotion = (chunk.emotion || '').toLowerCase();
+            if (emotion === 'anger') boost += 0.04;
+            if (['sadness', 'fear', 'disgust'].includes(emotion)) boost += 0.03;
+            return { ...chunk, score: chunk.score + boost };
+        })
+        .sort((a, b) => b.score - a.score);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// runSemanticSearch  (Mode B)
+// For topical questions (with or without date).
+// 1. FAISS → nearest 10 chunks
+// 2. Reject if top score < 0.30
+// 3. Load FeedbackChunk docs, optionally filter by date
+// 4. Apply category + sentiment boosts, deduplicate, take top 8
+// 5. Soft-filter by query hints
+// Returns { chunks, topicMismatch, emptyPeriod }
+// ─────────────────────────────────────────────────────────────────────────────
+async function runSemanticSearch(questionEmbedding, queryHints, dateRange, detectedCategory = null) {
+    const faissResults = await searchFaiss(questionEmbedding, 10);
+    if (!faissResults.length) return { chunks: [], topicMismatch: true, emptyPeriod: false };
+    if (faissResults[0].score < 0.38) return { chunks: [], topicMismatch: true, emptyPeriod: false };
+
+    const faissIds = faissResults.map(r => r.faissId);
+    let chunks = await FeedbackChunk.find({
+        faissId:         { $in: faissIds },
+        embeddingStatus: 'indexed'
+    }).select('chunkText feedbackId chunkIndex sourceType sentiment emotion tags topicLabel topicShortLabel anonymous_id faissId');
+
+    if (!chunks.length) return { chunks: [], topicMismatch: true, emptyPeriod: false };
+
+    // Optional date filter via parent Feedback
+    if (dateRange) {
+        const feedbackIds   = chunks.map(c => c.feedbackId);
+        const dateFilter    = { _id: { $in: feedbackIds }, createdAt: { $gte: dateRange.start } };
+        if (dateRange.end) dateFilter.createdAt.$lte = dateRange.end;
+
+        const validFeedbacks = await Feedback.find(dateFilter).select('_id');
+        const validIds       = new Set(validFeedbacks.map(f => f._id.toString()));
+        chunks = chunks.filter(c => validIds.has(c.feedbackId.toString()));
+
+        if (!chunks.length) return { chunks: [], topicMismatch: false, emptyPeriod: true };
+    }
+
+    // Score, boost, deduplicate, soft-filter
+    const scoreMap = {};
+    faissResults.forEach(r => { scoreMap[r.faissId] = r.score; });
+
+    const scored   = chunks.map(c => ({ ...c.toObject(), score: scoreMap[c.faissId] || 0 })).sort((a, b) => b.score - a.score);
+    const boosted  = applySentimentBoost(applyCategoryBoost(scored, detectedCategory));
+
+    const seen    = new Set();
+    const deduped = [];
+    for (const item of boosted) {
+        const key = item.chunkText.slice(0, 120).toLowerCase().trim();
+        if (!seen.has(key)) { seen.add(key); deduped.push(item); }
+    }
+
+    const filtered = softFilterChunkResults(deduped.slice(0, 8), queryHints, detectedCategory);
+    return { chunks: filtered, topicMismatch: false, emptyPeriod: false };
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   SECTION 7 — PROMPT BUILDERS
+═══════════════════════════════════════════════════════════════════════════ */
+
+// ─────────────────────────────────────────────────────────────────────────────
+// buildAnalysisPrompt
+// Main prompt for analysis, quick, and aggregation intents.
+// ─────────────────────────────────────────────────────────────────────────────
+function buildAnalysisPrompt(message, context, dateLabel, queryHints, intent, responseMode) {
+    const topicStr = queryHints?.length ? `Topic: ${queryHints.join(', ')}` : null;
+    const scope    = [topicStr, dateLabel ? `Period: ${dateLabel}` : null]
+        .filter(Boolean)
+        .join(' | ');
+
+    return `
+Admin question:
+"${message}"
+
+Scope:
+${scope || 'All available feedback'}
+
+Student feedback data:
+${context}
+
+Task:
+Answer the admin's question using the feedback data.
+
+Guidance:
+- Focus on the most impactful problems
+- Suggest practical, realistic actions
+- Avoid generic or obvious recommendations
+- Keep solutions clear and distinct
+- Phrase insights as conclusions, not observations
+`.trim();
+}
+// ─────────────────────────────────────────────────────────────────────────────
+// buildSolutionPrompt
+// Prompt for when the admin explicitly asks for recommended actions.
+// ─────────────────────────────────────────────────────────────────────────────
+function buildSolutionPrompt(message, context, dateLabel, queryHints, priorQuestion) {
+    const topicStr = queryHints?.length ? `Topic: ${queryHints.join(', ')}` : null;
+    const scope    = [topicStr, dateLabel ? `Period: ${dateLabel}` : null]
+        .filter(Boolean)
+        .join(' | ');
+
+    return `
+Admin request:
+"${message}"
+
+${priorQuestion ? `Context: "${priorQuestion}"` : ''}
+
+Scope:
+${scope || 'All available feedback'}
+
+Student feedback data:
+${context}
+
+Task:
+Provide practical actions based on the issues in the data.
+
+Guidance:
+- Focus on the most important problems
+- Suggest clear, actionable steps
+- Keep responses concise and useful
+`.trim();
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   SECTION 8 — AI RESPONSE GENERATORS
+═══════════════════════════════════════════════════════════════════════════ */
+
+// ─────────────────────────────────────────────────────────────────────────────
+// generateAIResponse
+// Standard (non-streaming) Groq call.
+// Messages: system prompt → flattened history → user prompt.
+// Returns a friendly error string on failure instead of throwing.
+// ─────────────────────────────────────────────────────────────────────────────
+async function generateAIResponse(prompt, history = [], systemPrompt = null) {
+    try {
+        const messages = [
+            { role: 'system', content: systemPrompt || SYSTEM_PROMPT },
+            ...history.flatMap(h => ([
+                { role: 'user',      content: h.question },
+                { role: 'assistant', content: h.answer   }
+            ])),
+            { role: 'user', content: prompt }
+        ];
+        const result = await groqWithTimeout({ model: 'llama-3.1-8b-instant', messages, max_tokens: 800, temperature: 0.6 });
+        return cleanAIResponse(result.choices[0]?.message?.content?.trim() || '');
+    } catch (err) {
+        console.error('[AI] generateAIResponse error:', err.message);
+        return "I'm having trouble processing that right now. Please try again in a moment.";
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// streamAIResponse
+// Streaming Groq call for /chat/stream.
+// Buffers the first ~60 chars to run cleanAIResponse on meta-openers,
+// then streams the rest directly for low latency.
+// Returns the full accumulated text so the caller can save it to the session.
+// ─────────────────────────────────────────────────────────────────────────────
+async function streamAIResponse(prompt, history = [], sendChunk, systemPrompt = null) {
+    const messages = [
+        { role: 'system', content: systemPrompt || SYSTEM_PROMPT },
+        ...history.flatMap(h => ([
+            { role: 'user',      content: h.question },
+            { role: 'assistant', content: h.answer   }
+        ])),
+        { role: 'user', content: prompt }
+    ];
+
+    const stream = await groq.chat.completions.create({
+        model: 'llama-3.1-8b-instant', messages, max_tokens: 800, temperature: 0.6, stream: true
+    });
+
+    let fullAnswer    = '';
+    let introBuffer   = '';
+    let introStripped = false;
+
+    for await (const chunk of stream) {
+        const text = chunk.choices[0]?.delta?.content || '';
+        if (!text) continue;
+        fullAnswer += text;
+
+        if (!introStripped) {
+            introBuffer += text;
+            if (introBuffer.length >= 60 && /[.!?]\s/.test(introBuffer)) {
+                const cleaned = cleanAIResponse(introBuffer);
+                introStripped = true;
+                if (cleaned) sendChunk({ text: cleaned });
+                introBuffer = '';
+            }
+        } else {
+            sendChunk({ text });
+        }
+    }
+
+    if (introBuffer) {
+        const cleaned = cleanAIResponse(introBuffer);
+        if (cleaned) sendChunk({ text: cleaned });
+    }
+
+    return cleanAIResponse(fullAnswer);
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   SECTION 9 — SHARED CHAT PIPELINE
+═══════════════════════════════════════════════════════════════════════════ */
+
+// ─────────────────────────────────────────────────────────────────────────────
+// runChatPipeline
+//
+// Central brain of both chat routes.
+// Returns: { answer: string, meta: object }
+//
+// Decision flow:
+//  1.  Chit-chat          → minimal/no Groq call
+//  2.  Gibberish          → reject, no API call
+//  3.  Pending metric     → static rejection
+//  4.  Stats question     → DB counts + one Groq sentence
+//  5.  Short follow-up    → early context clarification
+//  6.  Intent detection   → aggregation / rewrite / expand / solution / analysis
+//  7a. Mode A             → MongoDB date query → Groq
+//  7b. Mode B             → FAISS → FeedbackChunk → Groq
+// ─────────────────────────────────────────────────────────────────────────────
+async function runChatPipeline(message, session, history, streamMode = false, sendChunk = null) {
+    const lastContext  = getLastAssistantContext(history);
+    const followUpMode = history.length > 0 && isShortFollowUp(message);
+
+    // ── 1. Chit-chat ─────────────────────────────────────────────────────────
+    const chitChatType = detectChitChat(message);
+
+    if (chitChatType) {
+        // Static responses (no Groq call)
+        const staticReplies = {
+            greeting:        () => buildGreetingReply(message),
+            acknowledgement: () => 'Noted. Let me know if you want to explore this further.',
+            farewell:        () => "Alright, see you. Feel free to come back anytime if you need insights.",
+            gratitude:       () => "You're welcome.",
+            status:          () => "I'm ready to help analyze student feedback and identify key issues."
+        };
+
+        if (staticReplies[chitChatType]) {
+            const answer = staticReplies[chitChatType]();
+            if (session) { session.addMessage(message, answer); await session.save(); }
+            return { answer, meta: { mode: 'chit-chat' } };
+        }
+
+        // identity and yes_no still use Groq
+        let answer;
+        if (streamMode && sendChunk) {
+            const chitMessages = chitChatType === 'yes_no'
+                ? [
+                    ...history.flatMap(h => ([
+                        { role: 'user',      content: h.question },
+                        { role: 'assistant', content: h.answer   }
+                    ])),
+                    { role: 'user', content: CHIT_CHAT_PROMPTS['yes_no'] }
+                  ]
+                : [{ role: 'user', content: CHIT_CHAT_PROMPTS[chitChatType] }];
+
+            const stream = await groq.chat.completions.create({
+                model: 'llama-3.1-8b-instant',
+                messages: chitMessages,
+                max_tokens: chitChatType === 'yes_no' ? 600 : 150,
+                temperature: 0.6,
+                stream: true
+            });
+
+            let full = '';
+            for await (const chunk of stream) {
+                const t = chunk.choices[0]?.delta?.content || '';
+                if (t) { full += t; sendChunk({ text: t }); }
+            }
+            answer = cleanAIResponse(full);
+        } else {
+            answer = await generateAIResponse(
+                CHIT_CHAT_PROMPTS[chitChatType],
+                chitChatType === 'yes_no' ? history : []
+            );
+        }
+
+        if (session) { session.addMessage(message, answer); await session.save(); }
+        return { answer, meta: { mode: 'chit-chat' } };
+    }
+
+
+    // ── 2. Gibberish check ───────────────────────────────────────────────────
+if (isGibberish(message)) {
+    return {
+        answer: `I couldn't understand that message. Try asking something like: "What are students complaining about most?" or "Summarize today's feedback."`,
+        meta: {}
+    };
+}
+    // ── 3. Unsupported metric ────────────────────────────────────────────────
+    const normalizedLower = message.toLowerCase().replace(/[.,/#!$%^&*;:{}=\-_`~()]/g, ' ').replace(/\s+/g, ' ').trim();
+
+    if (/\bpending\b/i.test(normalizedLower)) {
+        return {
+            answer: "I don't currently track pending feedback status. I can only show total submissions and resolved issues.",
+            meta: { source: 'stats', unsupportedMetric: 'pending' }
+        };
+    }
+
+    // ── 4. Stats questions ───────────────────────────────────────────────────
+    const isStatQuestion =
+        /(how many|total|count|number of|stats|statistics|metrics|figures|top tags|most common tags)/i.test(normalizedLower) &&
+        !/(categories|themes|topics|main issues|most talked|most common issue|most common category|common issues|patterns|trends|recurring issues|major concerns|key concerns)/i.test(normalizedLower);
+
+    if (isStatQuestion) {
+        const stats = await getStats();
+        const topTagsList = stats.topTags.length
+            ? stats.topTags.map(t => `${t._id} (${t.count})`).join(', ')
+            : 'no tagged data yet';
+
+        const factLines = [];
+        if (/total|how many/i.test(normalizedLower)) factLines.push(`Total submissions: **${stats.total}**`);
+        if (/resolved/i.test(normalizedLower))        factLines.push(`Resolved issues: **${stats.resolved}**`);
+        if (/tag/i.test(normalizedLower))             factLines.push(`Top tags: ${topTagsList}`);
+
+        const factualPart = factLines.join('  \n') || `Total: **${stats.total}** | Resolved: **${stats.resolved}**`;
+
+        const observation = await generateAIResponse(
+            `Stats available — Total submissions: ${stats.total}, Resolved issues: ${stats.resolved}, Top tags: ${topTagsList}.
+Admin asked: "${message}".
+In one sentence, add a brief analytical observation.
+Do not mention pending, unresolved, or approval status unless explicitly provided.`,
+            history
+        );
+
+        const answer = `${factualPart}\n\n${observation}`.trim();
+        if (session) { session.addMessage(message, answer); await session.save(); }
+        return { answer, meta: { source: 'stats' } };
+    }
+
+    // ── 5. Short follow-up with no prior context ──────────────────────────────
+    const isVeryShort = message.trim().split(/\s+/).length <= 3;
+    if (isVeryShort && isShortFollowUp(message) && !lastContext?.lastQuestion) {
+        const answer = "Can you specify which issue or feedback area you're referring to?";
+        if (session) { session.addMessage(message, answer); await session.save(); }
+        return { answer, meta: { needsContext: true } };
+    }
+
+    // Prepend prior context for short follow-ups
+    let cleanMessage = followUpMode && lastContext
+        ? buildConversationalQuery(message, lastContext)
+        : message;
+
+    // ── 6. Intent, date, mode detection ──────────────────────────────────────
+    const dateRange    = detectDateRange(normalizedLower);
+    const intent       = detectIntent(cleanMessage);
+    const responseMode = detectResponseMode(cleanMessage);
+    const queryHints   = extractQueryHints(cleanMessage);
+
+    // ── Aggregation ───────────────────────────────────────────────────────────
+    if (intent === 'aggregation') {
+        const categories = await getTopCategories(dateRange);
+        if (!categories.length) {
+            return { answer: "There is not enough feedback data for this period.", meta: { mode: 'aggregation' } };
+        }
+
+        const context = categories.map(cat =>
+            `${cat._id} (${cat.count} mentions, ${cat.negativeCount} negative)`
+        ).join('\n');
+
+        const prompt = `
+Admin question: "${message}"
+
+Top feedback categories:
+${context}
+
+Explain the main issues clearly based on these categories.
+Do NOT invent anything. No percentages. Focus on the most important categories.
+`.trim();
+
+        const answer = await generateAIResponse(prompt, history);
+        if (session) { session.addMessage(message, answer); await session.save(); }
+        return { answer, meta: { mode: 'aggregation' } };
+    }
+
+    // ── Rewrite ───────────────────────────────────────────────────────────────
+    if (intent === 'rewrite' && lastContext?.lastAnswer) {
+        const rewritePrompt = `
+Rewrite the previous assistant answer. The admin was not satisfied with it.
+
+Previous admin question:
+${lastContext.lastQuestion || ''}
+
+Previous assistant answer:
+${lastContext.lastAnswer.slice(0, 600).trim()}
+
+Admin feedback:
+${message}
+
+STRICT RULES:
+- Use the same underlying feedback data — do NOT introduce new issues.
+- Do NOT repeat the same wording, structure, or sentence order.
+- Make it shorter, clearer, and more direct.
+- Lead immediately with the main insight. No preamble.
+- Do NOT invent quotes, counts, numbers, or examples.
+- Follow the system prompt style strictly.
+`.trim();
+
+        const answer = await generateAIResponse(rewritePrompt, []);
+        if (session) { session.addMessage(message, answer); await session.save(); }
+        return { answer, meta: { mode: 'rewrite' } };
+    }
+
+    // ── Expand ────────────────────────────────────────────────────────────────
+    if (isExpansionRequest(message) && lastContext?.lastAnswer) {
+        const expandPrompt = `
+The admin wants more detail on the previous answer.
+
+Previous admin question:
+${lastContext.lastQuestion || ''}
+
+Previous assistant answer:
+${lastContext.lastAnswer.slice(0, 600).trim()}
+
+STRICT RULES:
+- Only expand on issues already present in the previous answer.
+- Do NOT introduce new issues, topics, or concerns.
+- Do NOT invent quotes, counts, numbers, or examples.
+- Add depth and context — but stay grounded.
+- Lead with the most important point. No preamble.
+- Follow the system prompt style strictly.
+`.trim();
+
+        const answer = await generateAIResponse(expandPrompt, []);
+        if (session) { session.addMessage(message, answer); await session.save(); }
+        return { answer, meta: { mode: 'expand' } };
+    }
+
+    // ── Broad solution (no specific topic) ────────────────────────────────────
+    const isBroadSolution = intent === 'solution' && !dateRange &&
+        !/\b(about|regarding|on|for)\b/.test(cleanMessage.toLowerCase());
+
+    if (isBroadSolution) {
+        const feedbackDocs = await Feedback.find()
+            .sort({ createdAt: -1 }).limit(80)
+            .select('feedback evidenceText tags topicLabel sentiment emotion createdAt');
+
+        if (!feedbackDocs.length) {
+            return { answer: "No feedback has been submitted yet, so I can't suggest any solutions right now.", meta: { mode: 'broad_solution' } };
+        }
+
+        const context = buildFeedbackSummaryContext(feedbackDocs);
+        const sentimentSummary = Object.entries(
+            feedbackDocs.reduce((a, d) => { const s = (d.sentiment || 'unknown').toLowerCase(); a[s] = (a[s] || 0) + 1; return a; }, {})
+        ).map(([s, c]) => `${c} ${s}`).join(', ');
+        const emotionSummary = Object.entries(
+            feedbackDocs.reduce((a, d) => { const e = (d.emotion || 'neutral').toLowerCase(); a[e] = (a[e] || 0) + 1; return a; }, {})
+        ).map(([e, c]) => `${c} ${e}`).join(', ');
+
+        const solutionPrompt = buildSolutionPrompt(message, context, null, [], sentimentSummary, emotionSummary, feedbackDocs.length, null);
+
+        let answer;
+        if (streamMode && sendChunk) { answer = await streamAIResponse(solutionPrompt, history, sendChunk); }
+        else                         { answer = await generateAIResponse(solutionPrompt, history); }
+
+        if (session) { session.addMessage(message, answer); await session.save(); }
+        return { answer, meta: { ragResults: feedbackDocs.length, mode: 'broad_solution', intent } };
+    }
+
+    // ── 7a. Mode A — Time-based summary (no specific topic) ──────────────────
+    if (isTimeSummaryQuery(cleanMessage, dateRange, queryHints)) {
+        const feedbackDocs = await runTimeSummarySearch(dateRange);
+
+        if (!feedbackDocs.length) {
+            const recent = await Feedback.find().sort({ createdAt: -1 }).limit(5)
+                .select('feedback sentiment emotion tags createdAt');
+            const recentCtx      = recent.map(d => `[${d.sentiment}|${d.emotion}] ${d.feedback} (${new Date(d.createdAt).toDateString()})`).join('\n') || 'No feedback available yet.';
+            const noDataMsg      = dateRange.label === 'today' ? 'No new feedback has been submitted today yet.' : `No feedback was submitted for ${dateRange.label}.`;
+            const fallbackPrompt = `The admin asked: "${message}". ${noDataMsg} Do NOT invent feedback. Most recent available:\n${recentCtx}\nTell the admin clearly that nothing was submitted for the requested period, then briefly note what the recent feedback shows.`;
+
+            let answer;
+            if (streamMode && sendChunk) { answer = await streamAIResponse(fallbackPrompt, history, sendChunk); }
+            else                         { answer = await generateAIResponse(fallbackPrompt, history); }
+
+            if (session) { session.addMessage(message, answer); await session.save(); }
+            return { answer, meta: { ragResults: 0, emptyPeriod: true, detectedPeriod: dateRange.label } };
+        }
+
+        const context          = buildFeedbackSummaryContext(feedbackDocs);
+        const sentimentSummary = Object.entries(feedbackDocs.reduce((a, d) => { const s = (d.sentiment || 'unknown').toLowerCase(); a[s] = (a[s] || 0) + 1; return a; }, {})).map(([s, c]) => `${c} ${s}`).join(', ');
+        const emotionSummary   = Object.entries(feedbackDocs.reduce((a, d) => { const e = (d.emotion || 'neutral').toLowerCase();    a[e] = (a[e] || 0) + 1; return a; }, {})).map(([e, c]) => `${c} ${e}`).join(', ');
+        const prompt           = buildAnalysisPrompt(message, context, dateRange.label, queryHints, intent, sentimentSummary, emotionSummary, feedbackDocs.length, responseMode);
+
+        let answer;
+        if (streamMode && sendChunk) { answer = await streamAIResponse(prompt, history, sendChunk); }
+        else                         { answer = await generateAIResponse(prompt, history); }
+
+        if (session) { session.addMessage(message, answer); await session.save(); }
+        return { answer, meta: { ragResults: feedbackDocs.length, mode: 'time_summary', detectedPeriod: dateRange.label, intent } };
+    }
+
+    // ── 7b. Mode B — Semantic FAISS search ───────────────────────────────────
+    const normalizedQuery = normalizeQueryForIntent(cleanMessage, lastContext);
+    const cacheKey        = normalizedQuery + '|' + (dateRange?.label || '');
+
+    if (!dateRange) {
+        const cached = responseCache.get(cacheKey);
+        if (cached) {
+            if (session) { session.addMessage(message, cached); await session.save(); }
+            return { answer: cached, meta: { fromCache: true } };
+        }
+    }
+
+    let questionEmbedding = embeddingCache.get(normalizedQuery);
+    if (!questionEmbedding) {
+        questionEmbedding = await generateEmbedding(normalizedQuery);
+        if (!questionEmbedding || !questionEmbedding.length) {
+            return { answer: 'Failed to process your question. Please try again.', meta: { error: 'embedding_failed' } };
+        }
+        embeddingCache.set(normalizedQuery, questionEmbedding);
+    }
+
+    const categoryResults  = await searchCategoryFaiss(questionEmbedding, 1);
+    const bestCategory     = categoryResults[0] || null;
+    const detectedCategory = bestCategory?.score >= 0.62 ? bestCategory.metadata : null;
+
+    const { chunks, topicMismatch, emptyPeriod } = await runSemanticSearch(questionEmbedding, queryHints, dateRange, detectedCategory);
+
+    // No FAISS match above threshold
+    if (topicMismatch) {
+        const looksLikeFeedbackQuestion = /(feedback|student|students|complaint|complaints|issue|issues|suggestion|suggestions|trend|trends|summary|summarize|summarise|sentiment|tag|tags|resolution|overall|going on|resolved)/i.test(cleanMessage);
+        const answer = looksLikeFeedbackQuestion
+            ? "I couldn't find matching feedback for that topic yet. Try asking about a different issue, service, or time period."
+            : "I'm designed to help with university student feedback analysis. Try asking about complaints, trends, summaries, or issues students are reporting.";
+
+        if (session) { session.addMessage(message, answer); await session.save(); }
+        return { answer, meta: { mode: looksLikeFeedbackQuestion ? 'no_matching_feedback' : 'out_of_scope', topicMismatch: true } };
+    }
+
+    // Topic matched but date filter removed all results
+    if (emptyPeriod && !chunks.length) {
+        const recent    = await Feedback.find().sort({ createdAt: -1 }).limit(5).select('feedback sentiment emotion tags createdAt');
+        const recentCtx = recent.map(d => `[${d.sentiment}|${d.emotion}] ${d.feedback} (${new Date(d.createdAt).toDateString()})`).join('\n') || 'No feedback available yet.';
+        const periodMsg = dateRange?.label === 'today' ? 'No new feedback has been submitted today yet.' : `No feedback was submitted for ${dateRange?.label}.`;
+        const fallbackPrompt = `The admin asked: "${message}". ${periodMsg} Do NOT invent feedback. Most recent available:\n${recentCtx}\nTell the admin clearly that nothing was submitted for the requested period, then briefly note what the recent feedback shows.`;
+
+        let answer;
+        if (streamMode && sendChunk) { answer = await streamAIResponse(fallbackPrompt, history, sendChunk); }
+        else                         { answer = await generateAIResponse(fallbackPrompt, history); }
+
+        if (session) { session.addMessage(message, answer); await session.save(); }
+        return { answer, meta: { ragResults: 0, emptyPeriod: true } };
+    }
+
+    // Edge case: no chunks and no clear reason
+    if (!chunks.length) {
+        const answer = await generateAIResponse(
+            `The admin asked: "${message}". No directly matching feedback was found. Tell the admin no specific match was found and suggest they try a different time period or topic.`,
+            history
+        );
+        if (session) { session.addMessage(message, answer); await session.save(); }
+        return { answer, meta: { ragResults: 0 } };
+    }
+
+    // ── Build context and generate final response ─────────────────────────────
+    const context          = buildChunkContext(chunks);
+    const sentimentSummary = Object.entries(chunks.reduce((a, c) => { const s = (c.sentiment || 'unknown').toLowerCase(); a[s] = (a[s] || 0) + 1; return a; }, {})).map(([s, c]) => `${c} ${s}`).join(', ');
+    const emotionSummary   = Object.entries(chunks.reduce((a, c) => { const e = (c.emotion || 'neutral').toLowerCase();    a[e] = (a[e] || 0) + 1; return a; }, {})).map(([e, c]) => `${c} ${e}`).join(', ');
+
+    let answer;
+
+    if (intent === 'solution') {
+        const priorQuestion  = followUpMode && lastContext?.lastQuestion ? lastContext.lastQuestion : null;
+        const solutionPrompt = buildSolutionPrompt(message, context, dateRange?.label, queryHints, sentimentSummary, emotionSummary, chunks.length, priorQuestion);
+
+        if (streamMode && sendChunk) { answer = await streamAIResponse(solutionPrompt, history, sendChunk); }
+        else                         { answer = await generateAIResponse(solutionPrompt, history); }
+
+    } else if (intent === 'resolved') {
+        const resolvedPrompt = `The admin said: "${message}". The issue has been noted as resolved. Acknowledge warmly in 1-2 sentences. No headings needed.`;
+
+        if (streamMode && sendChunk) {
+            const stream = await groq.chat.completions.create({
+                model: 'llama-3.1-8b-instant',
+                messages: [{ role: 'user', content: resolvedPrompt }],
+                max_tokens: 800, temperature: 0.6, stream: true
+            });
+            let full = '';
+            for await (const chunk of stream) {
+                const t = chunk.choices[0]?.delta?.content || '';
+                if (t) { full += t; sendChunk({ text: t }); }
+            }
+            answer = cleanAIResponse(full);
+        } else {
+            answer = await generateAIResponse(resolvedPrompt);
+        }
+
+    } else {
+        const analysisPrompt = buildAnalysisPrompt(message, context, dateRange?.label, queryHints, intent, sentimentSummary, emotionSummary, chunks.length, responseMode);
+
+        if (streamMode && sendChunk) { answer = await streamAIResponse(analysisPrompt, history, sendChunk); }
+        else                         { answer = await generateAIResponse(analysisPrompt, history); }
+    }
+
+    // Final safety check
+    answer = cleanAIResponse(answer);
+    if (!answer || answer.trim().length === 0) {
+        answer = "I couldn't generate a clear response for that. Try rephrasing your question slightly.";
+    } else {
+        answer = enforceFollowUp(answer, intent);
+    }
+
+const safeAnswer = typeof answer === 'string' ? answer : '';
+
+const isBadFallback =
+  !safeAnswer ||
+  safeAnswer.includes("I'm having trouble processing that right now") ||
+  safeAnswer.includes("Failed to process your question") ||
+  safeAnswer.includes("I didn't quite understand that");
+
+if (!dateRange && !isBadFallback) {
+  responseCache.set(cacheKey, safeAnswer);
+}
+
+if (session) {
+  session.addMessage(message, safeAnswer);
+  await session.save();
+}
+
+return {
+  answer: safeAnswer,
+  meta: {
+    ragResults: chunks.length,
+    mode: 'semantic',
+    detectedPeriod: dateRange?.label || 'all time',
+    intent,
+    sentimentSummary
+  }
+};
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   SECTION 10 — ROUTES
+═══════════════════════════════════════════════════════════════════════════ */
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GET /digest
+// Auto-briefing for the admin dashboard.
+// Fallback: today → last 7 days → last 30 days → empty state.
+// ─────────────────────────────────────────────────────────────────────────────
 router.get('/digest', async (req, res) => {
     try {
         const { sessionId } = req.query;
-        const todayStart = new Date(); todayStart.setHours(0,0,0,0);
+        const select = 'feedback evidenceText tags sentiment emotion createdAt';
 
-        let feedbackDocs = await Feedback.find({ createdAt: { $gte: todayStart } })
-            .sort({ createdAt: -1 }).limit(20).select('feedback category sentiment createdAt');
-        let periodLabel = 'today';
+        const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
+        let feedbackDocs = await Feedback.find({ createdAt: { $gte: todayStart } }).sort({ createdAt: -1 }).limit(50).select(select);
+        let periodLabel  = 'today';
 
         if (!feedbackDocs.length) {
-            const weekStart = new Date(); weekStart.setDate(weekStart.getDate()-7);
-            feedbackDocs = await Feedback.find({ createdAt: { $gte: weekStart } })
-                .sort({ createdAt: -1 }).limit(20).select('feedback category sentiment createdAt');
-            periodLabel = 'the last 7 days';
+            const s = new Date(); s.setDate(s.getDate() - 7);
+            feedbackDocs = await Feedback.find({ createdAt: { $gte: s } }).sort({ createdAt: -1 }).limit(50).select(select);
+            periodLabel  = 'the last 7 days';
         }
         if (!feedbackDocs.length) {
-            const monthStart = new Date(); monthStart.setDate(monthStart.getDate()-30);
-            feedbackDocs = await Feedback.find({ createdAt: { $gte: monthStart } })
-                .sort({ createdAt: -1 }).limit(20).select('feedback category sentiment createdAt');
-            periodLabel = 'the last 30 days';
+            const s = new Date(); s.setDate(s.getDate() - 30);
+            feedbackDocs = await Feedback.find({ createdAt: { $gte: s } }).sort({ createdAt: -1 }).limit(50).select(select);
+            periodLabel  = 'the last 30 days';
         }
         if (!feedbackDocs.length) {
-            return res.json({ success:true, digest:"No student feedback has been submitted yet. Once students start submitting feedback, I'll provide daily insights here.", totalAnalysed:0 });
+            return res.json({ success: true, digest: "No student feedback has been submitted yet. Once students start submitting feedback, I'll provide daily insights here.", totalAnalysed: 0 });
         }
 
-        const stats = await getStats();
-        const feedbackContext = feedbackDocs.map((doc,i) => `${i+1}. [${doc.category}|${doc.sentiment}] ${doc.feedback}`).join('\n');
-        const sentimentCounts = feedbackDocs.reduce((acc,doc) => { acc[doc.sentiment]=(acc[doc.sentiment]||0)+1; return acc; }, {});
+        const stats            = await getStats();
+        const feedbackContext  = buildFeedbackSummaryContext(feedbackDocs);
+        const sentimentSummary = Object.entries(feedbackDocs.reduce((a, d) => { const s = (d.sentiment || 'neutral').toLowerCase(); a[s] = (a[s] || 0) + 1; return a; }, {})).map(([k, v]) => `${v} ${k}`).join(', ') || 'no data';
+        const emotionSummary   = Object.entries(feedbackDocs.reduce((a, d) => { const e = (d.emotion   || 'neutral').toLowerCase(); a[e] = (a[e] || 0) + 1; return a; }, {})).map(([k, v]) => `${v} ${k}`).join(', ') || 'no data';
+        const topTagsLine      = stats.topTags.length ? stats.topTags.slice(0, 5).map(t => `${t._id} (${t.count})`).join(', ') : 'no tags yet';
 
-        const digestPrompt = `You are preparing a proactive briefing for a university admin.
-Feedback period: ${periodLabel} | Submissions: ${feedbackDocs.length}
-Stats: Total=${stats.total}, Resolved=${stats.resolved}
-Sentiment: ${JSON.stringify(sentimentCounts)}
-Feedback:
+        const digestPrompt = `You are preparing a proactive briefing for a university administrator.
+
+Period: ${periodLabel} | Submissions analysed: ${feedbackDocs.length}
+System stats: Total=${stats.total}, Resolved=${stats.resolved}
+Top recurring tags: ${topTagsLine}
+Student Feedback Data:
 ${feedbackContext}
 
-Write a concise digest:
+Write a concise admin briefing:
 **Overview:** One sentence on the overall picture.
-**Top Issues:** 2-4 most prominent themes only from data above.
-**Sentiment:** Brief note on tone.
-**Suggested Focus:** One specific priority for today.
-STRICT: Only report what is in the feedback data above.`;
+**Top Issues:** 2-4 most prominent themes from the data above only.
+**Sentiment:** Brief note on the emotional tone.
+**Suggested Focus:** One specific priority action for today.
+
+STRICT RULE: Only report what is present in the feedback data above.`;
 
         const digest = await generateAIResponse(digestPrompt);
 
         if (sessionId) {
-            try {
-                await ChatSession.findOneAndUpdate(
-                    { sessionId },
-                    { $set: { expiresAt: new Date(Date.now()+24*60*60*1000) } },
-                    { upsert:true, new:true }
-                );
-            } catch(e) {}
+            try { await ChatSession.findOneAndUpdate({ sessionId }, { $set: { expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000) } }, { upsert: true, new: true }); }
+            catch (_) {}
         }
 
-        res.json({ success:true, digest, periodLabel, totalAnalysed: feedbackDocs.length });
-    } catch(err) {
-        console.error('Digest error:', err.message);
-        res.status(500).json({ success:false, message:'Failed to generate digest.' });
+        res.json({ success: true, digest, periodLabel, totalAnalysed: feedbackDocs.length });
+    } catch (err) {
+        console.error('[digest] Error:', err.message);
+        res.status(500).json({ success: false, message: 'Failed to generate digest.' });
     }
 });
 
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /chat
+// Input:  { message: string, sessionId?: string }
+// Output: { success: true, answer: string, ...meta }
+// ─────────────────────────────────────────────────────────────────────────────
 router.post('/chat', chatRateLimiter, async (req, res) => {
     try {
         const { message, sessionId } = req.body;
-        if (!message) return res.status(400).json({ success:false, message:'Message is required.' });
-        if (isGibberish(message)) return res.json({ success:true, answer:"I didn't quite understand that. Try asking something like \"How are students feeling about the canteen?\"" });
+        if (!message) return res.status(400).json({ success: false, message: 'Message is required.' });
 
         const { session, history } = await loadSession(sessionId);
+        const { answer, meta }     = await runChatPipeline(message, session, history, false, null);
 
-        const chitChatType = detectChitChat(message);
-        if (chitChatType) {
-            const answer = chitChatType === 'yes_no'
-                ? await generateAIResponse(CHIT_CHAT_PROMPTS[chitChatType], history)
-                : await generateAIResponse(CHIT_CHAT_PROMPTS[chitChatType]);
-            if (session) { session.addMessage(message, answer); await session.save(); }
-            return res.json({ success:true, answer });
-        }
-
-        const isFollowUp = history.length > 0;
-        const classification = await isRelevantQuestion(message, isFollowUp);
-        if (!isFollowUp && !classification.relevant) {
-            return res.json({ success:true, answer:"I'm here to help you understand student feedback. Try asking: \"What are students saying about the canteen this month?\" or \"What are the most common complaints?\"" });
-        }
-
-        const cleanMessage      = classification.normalised || message;
-        const normalizedMessage = cleanMessage.toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g,' ').replace(/\s+/g,' ').trim();
-        const stats             = await getStats();
-
-        const isStatQuestion = normalizedMessage.includes('total') || normalizedMessage.includes('pending') ||
-            (normalizedMessage.includes('category') && stats.categoryStats.length > 0);
-        if (isStatQuestion) {
-            const categoryBreakdown = stats.categoryStats.map(c=>`${c._id}: ${c.count}`).join(', ');
-            const topCategory = stats.categoryStats[0];
-            const factualPart = [
-                normalizedMessage.includes('total')    ? `Total submissions: **${stats.total}**` : null,
-                normalizedMessage.includes('pending')  ? `Resolved issues: **${stats.resolved}**` : null,
-                normalizedMessage.includes('category') ? `Top category: **${topCategory?._id}** (${topCategory?.count} submissions)` : null,
-            ].filter(Boolean).join('  \n');
-            const narrative = await generateAIResponse(`The admin asked: "${message}". Stats: Total=${stats.total}, Resolved=${stats.resolved}, Categories: ${categoryBreakdown||'none'}. In ONE sentence add a brief observation. Do not restate the numbers.`);
-            const answer = `${factualPart}\n\n${narrative}`.trim();
-            if (session) { session.addMessage(message, answer); await session.save(); }
-            return res.json({ success:true, answer, source:'stats' });
-        }
-
-        const detectedCategory = detectCategory(normalizedMessage);
-        const dateRange        = detectDateRange(normalizedMessage);
-        const intent           = detectIntent(cleanMessage);
-
-        // ── Broad query — fetch aggregated data from all categories ───────────
-        if (isBroadSummaryQuery(cleanMessage, detectedCategory, dateRange)) {
-            const { categoryAggregation, samplesByCategory, totalFeedback } = await fetchBroadData();
-            if (totalFeedback > 0) {
-                const broadPrompt  = buildBroadPrompt(message, categoryAggregation, samplesByCategory, totalFeedback);
-                const broadAnswer  = await generateAIResponse(broadPrompt, history);
-                if (session) { session.addMessage(message, broadAnswer); await session.save(); }
-                return res.json({ success:true, answer:broadAnswer, ragResults:totalFeedback, detectedCategory:'all', intent:'broad_summary' });
-            }
-        }
-
-        const cacheKey = cleanMessage + '|' + (detectedCategory||'') + '|' + (dateRange?.label||'');
-        const cached = responseCache.get(cacheKey);
-        if (cached && !dateRange) {
-            if (session) { session.addMessage(message, cached); await session.save(); }
-            return res.json({ success:true, answer: cached, fromCache: true });
-        }
-
-        let questionEmbedding = embeddingCache.get(cleanMessage);
-        if (!questionEmbedding) {
-            questionEmbedding = await generateEmbedding(cleanMessage);
-            if (!questionEmbedding.length) return res.status(500).json({ success:false, message:'Failed to generate embedding.' });
-            embeddingCache.set(cleanMessage, questionEmbedding);
-        }
-
-        const { results, emptyPeriod } = await runVectorSearch(questionEmbedding, detectedCategory, dateRange);
-
-        if (!results.length) {
-            let prompt;
-            if (emptyPeriod && dateRange) {
-                const recent = await Feedback.find().sort({ createdAt:-1 }).limit(5).select('feedback category sentiment createdAt');
-                const recentCtx = recent.length ? recent.map((d,i)=>`${i+1}. [${d.category}|${d.sentiment}] ${d.feedback} (${new Date(d.createdAt).toDateString()})`).join('\n') : 'None available.';
-                const periodMsg = dateRange.label === 'today'
-                    ? 'No new feedback has been submitted today yet.'
-                    : `No feedback was submitted for ${dateRange.label}.`;
-                prompt = `The admin asked: "${message}". ${periodMsg} Do NOT invent any feedback. Here is the most recent feedback available: ${recentCtx}. Tell the admin clearly that nothing was submitted for the requested period, then briefly summarize what the recent feedback shows instead.`;
-            } else {
-                const availableCategories = await Feedback.distinct('category');
-                const catList = availableCategories.length ? availableCategories.join(', ') : 'none yet';
-                prompt = `The admin asked: "${message}". No student feedback has been submitted about this specific topic yet. Tell the admin clearly in one sentence. Then ask: "Would you like to explore what students are saying about any of these areas: ${catList}?" Do NOT invent any feedback.`;
-            }
-            const answer = await generateAIResponse(prompt);
-            if (session) { session.addMessage(message, answer); await session.save(); }
-            return res.json({ success:true, answer, ragResults:0, emptyPeriod: !!emptyPeriod });
-        }
-
-        const filteredResults     = filterResultsByTopic(results, cleanMessage);
-        const context             = buildContext(filteredResults);
-        const sentimentCounts     = filteredResults.reduce((acc,doc) => { const s=(doc.sentiment||'unknown').toLowerCase(); acc[s]=(acc[s]||0)+1; return acc; }, {});
-        const sentimentSummary    = Object.entries(sentimentCounts).map(([s,c])=>`${c} ${s}`).join(', ');
-        const emotionCounts = filteredResults.reduce((acc, doc) => {
-        const e = (doc.emotion || 'neutral_emotion').toLowerCase();
-            acc[e] = (acc[e] || 0) + 1;
-            return acc;
-        }, {});
-        const emotionSummary = Object.entries(emotionCounts)
-            .map(([e, c]) => `${c} ${e}`)
-            .join(', ');
-        const namedPersonsSummary = buildNamedPersonsSummary(filteredResults);
-
-        if (intent === 'resolved') {
-            const resolutionCategory = detectResolutionCategory(cleanMessage);
-            const answer = await generateAIResponse(`The admin said: "${message}". ${resolutionCategory ? `Category: ${resolutionCategory}.` : ''} The issue has been noted as resolved. Acknowledge warmly in 1-2 sentences.`);
-            if (session) { session.addMessage(message, answer); await session.save(); }
-            return res.json({ success:true, answer, intent:'resolved' });
-        }
-
-        const prompt = buildPrompt(cleanMessage, context, dateRange?.label, detectedCategory, intent, sentimentSummary,emotionSummary, namedPersonsSummary, filteredResults.length);
-        const answer = await generateAIResponse(prompt, history);
-
-        if (!dateRange) responseCache.set(cacheKey, answer);
-        if (session) { session.addMessage(message, answer); await session.save(); }
-        res.json({ success:true, answer, ragResults:filteredResults.length, detectedCategory:detectedCategory||'all', detectedPeriod:dateRange?.label||'all time', intent, sentimentSummary });
-
-    } catch(err) {
-        console.error('Chat route error:', err.message);
-        res.status(500).json({ success:false, message:'AI processing failed. Please check your Groq API key.' });
+        res.json({ success: true, answer, ...meta });
+    } catch (err) {
+        console.error('[/chat] Error:', err.message);
+        res.status(500).json({ success: false, message: 'AI processing failed. Please check your Groq API key and try again.' });
     }
 });
 
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /chat/stream
+// Streaming via SSE.
+// Client receives: { text } chunks, then { done: true, ...meta }, then [DONE].
+// ─────────────────────────────────────────────────────────────────────────────
 router.post('/chat/stream', chatRateLimiter, async (req, res) => {
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.flushHeaders();
+
+    let streamedAnyText = false;
+
+    const sendChunk = (data) => {
+        if (data?.text) streamedAnyText = true;
+        res.write(`data: ${JSON.stringify(data)}\n\n`);
+    };
+    const endStream = () => { res.write(`data: [DONE]\n\n`); res.end(); };
+
     try {
         const { message, sessionId } = req.body;
-        if (!message) return res.status(400).json({ success:false, message:'Message is required.' });
-    
-        res.setHeader('Content-Type',  'text/event-stream');
-        res.setHeader('Cache-Control', 'no-cache');
-        res.setHeader('Connection',    'keep-alive');
-        res.setHeader('Access-Control-Allow-Origin', '*');
-        res.flushHeaders();
-
-        const sendChunk = (data) => res.write(`data: ${JSON.stringify(data)}\n\n`);
-        const endStream = () => { res.write(`data: [DONE]\n\n`); res.end(); };
-        if (isGibberish(message)) { sendChunk({ text:"I didn't quite understand that. Try asking something like \"How are students feeling about the canteen or something else about feedback?\"" }); return endStream(); }
+        if (!message) { sendChunk({ error: 'Message is required.' }); return endStream(); }
 
         const { session, history } = await loadSession(sessionId);
+        const { answer, meta }     = await runChatPipeline(message, session, history, true, sendChunk);
 
-        const chitChatType = detectChitChat(message);
-        if (chitChatType) {
-            const streamMessages = chitChatType === 'yes_no'
-                ? [...history.map(h=>([{role:'user',content:h.question},{role:'assistant',content:h.answer}])).flat(), {role:'user',content:CHIT_CHAT_PROMPTS['yes_no']}]
-                : [{role:'user',content:CHIT_CHAT_PROMPTS[chitChatType]}];
-            const stream = await groq.chat.completions.create({ model:'llama-3.1-8b-instant', messages:streamMessages, max_tokens:chitChatType==='yes_no'?400:150, temperature:0.4, stream:true });
-            let fullAnswer = '';
-            for await (const chunk of stream) {
-                const text = chunk.choices[0]?.delta?.content || '';
-                if (text) { fullAnswer += text; sendChunk({ text }); }
-            }
-            if (session) { session.addMessage(message, cleanAIResponse(fullAnswer)); await session.save(); }
-            return endStream();
-        }
-
-        const isFollowUp = history.length > 0;
-        const classification = await isRelevantQuestion(message, isFollowUp);
-        if (!isFollowUp && !classification.relevant) {
-            sendChunk({ text:"I'm here to help you understand student feedback. Try asking: \"What are students saying about the canteen?\" or \"What are the most common complaints?\"" });
-            return endStream();
-        }
-
-        const cleanMessage      = classification.normalised || message;
-        const normalizedMessage = cleanMessage.toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g,' ').replace(/\s+/g,' ').trim();
-        const stats             = await getStats();
-
-        const isStatQuestion = normalizedMessage.includes('total') || normalizedMessage.includes('pending') ||
-            (normalizedMessage.includes('category') && stats.categoryStats.length > 0);
-        if (isStatQuestion) {
-            const categoryBreakdown = stats.categoryStats.map(c=>`${c._id}: ${c.count}`).join(', ');
-            const topCategory = stats.categoryStats[0];
-            const factualPart = [
-                normalizedMessage.includes('total')    ? `Total submissions: **${stats.total}**` : null,
-                normalizedMessage.includes('pending')  ? `Resolved issues: **${stats.resolved}**` : null,
-                normalizedMessage.includes('category') ? `Top category: **${topCategory?._id}** (${topCategory?.count} submissions)` : null,
-            ].filter(Boolean).join('  \n');
-            sendChunk({ text: factualPart + '\n\n' });
-            const stream = await groq.chat.completions.create({ model:'llama-3.1-8b-instant', messages:[{role:'user',content:`Stats: Total=${stats.total}, Resolved=${stats.resolved}, Categories: ${categoryBreakdown||'none'}. In ONE sentence add a brief observation. Do not restate numbers.`}], max_tokens:100, temperature:0.4, stream:true });
-            let narrative = '';
-            for await (const chunk of stream) { const text=chunk.choices[0]?.delta?.content||''; if(text){narrative+=text;sendChunk({text});} }
-            if (session) { session.addMessage(message, cleanAIResponse(factualPart+'\n\n'+narrative)); await session.save(); }
-            return endStream();
-        }
-
-        const detectedCategory = detectCategory(normalizedMessage);
-        const dateRange        = detectDateRange(normalizedMessage);
-        const intent           = detectIntent(cleanMessage);
-
-        // ── Broad query stream version ────────────────────────────────────────
-        if (isBroadSummaryQuery(cleanMessage, detectedCategory, dateRange)) {
-            const { categoryAggregation, samplesByCategory, totalFeedback } = await fetchBroadData();
-            if (totalFeedback > 0) {
-                const broadPrompt = buildBroadPrompt(message, categoryAggregation, samplesByCategory, totalFeedback);
-                const broadMessages = [
-                    { role: 'system', content: SYSTEM_PROMPT },
-                    ...history.map(h=>([{role:'user',content:h.question},{role:'assistant',content:h.answer}])).flat(),
-                    { role: 'user', content: broadPrompt }
-                ];
-                const broadStream = await groq.chat.completions.create({
-                    model: 'llama-3.1-8b-instant',
-                    messages: broadMessages,
-                    max_tokens: 1500,
-                    temperature: 0.4,
-                    stream: true
-                });
-                let fullAnswer = '';
-                for await (const chunk of broadStream) {
-                    const text = chunk.choices[0]?.delta?.content || '';
-                    if (text) { fullAnswer += text; sendChunk({ text }); }
-                }
-                if (session) { session.addMessage(message, cleanAIResponse(fullAnswer)); await session.save(); }
-                sendChunk({ done:true, ragResults:totalFeedback, detectedCategory:'all', intent:'broad_summary' });
-                return endStream();
-            }
-        }
-
-        let questionEmbedding = embeddingCache.get(cleanMessage);
-        if (!questionEmbedding) {
-            questionEmbedding = await generateEmbedding(cleanMessage);
-            if (!questionEmbedding.length) { sendChunk({ text:'Failed to process your question. Please try again.' }); return endStream(); }
-            embeddingCache.set(cleanMessage, questionEmbedding);
-        }
-
-        const { results, emptyPeriod } = await runVectorSearch(questionEmbedding, detectedCategory, dateRange);
-
-        if (!results.length) {
-            let noDataPrompt;
-            if (emptyPeriod && dateRange) {
-                const recent = await Feedback.find().sort({createdAt:-1}).limit(5).select('feedback category sentiment createdAt');
-                const recentCtx = recent.length ? recent.map((d,i)=>`${i+1}. [${d.category}|${d.sentiment}] ${d.feedback} (${new Date(d.createdAt).toDateString()})`).join('\n') : 'None available.';
-                const periodMsg2 = dateRange.label === 'today'
-                    ? 'No new feedback has been submitted today yet.'
-                    : `No feedback was submitted for ${dateRange.label}.`;
-                noDataPrompt = `The admin asked: "${message}". ${periodMsg2} Do NOT invent any feedback. Here is the most recent feedback available: ${recentCtx}. Tell the admin clearly that nothing was submitted for the requested period, then briefly summarize what the recent feedback shows instead.`;
-            } else {
-                const availableCategories = await Feedback.distinct('category');
-                const catList = availableCategories.length ? availableCategories.join(', ') : 'none yet';
-                noDataPrompt = `The admin asked: "${message}". No student feedback has been submitted about this specific topic yet. Tell the admin clearly in one sentence. Then ask: "Would you like to explore what students are saying about any of these areas: ${catList}?" Do NOT invent any feedback.`;
-            }
-            const stream = await groq.chat.completions.create({ model:'llama-3.1-8b-instant', messages:[{role:'user',content:noDataPrompt}], max_tokens:200, temperature:0.4, stream:true });
-            let fullAnswer = '';
-            for await (const chunk of stream) { const text=chunk.choices[0]?.delta?.content||''; if(text){fullAnswer+=text;sendChunk({text});} }
-            if (session) { session.addMessage(message, cleanAIResponse(fullAnswer)); await session.save(); }
-            return endStream();
-        }
-
-        const filteredResults     = filterResultsByTopic(results, cleanMessage);
-        const context             = buildContext(filteredResults);
-        const sentimentCounts     = filteredResults.reduce((acc,doc)=>{ const s=(doc.sentiment||'unknown').toLowerCase(); acc[s]=(acc[s]||0)+1; return acc; }, {});
-        const sentimentSummary    = Object.entries(sentimentCounts).map(([s,c])=>`${c} ${s}`).join(', ');
-        const emotionCounts = filteredResults.reduce((acc, doc) => {
-        const e = (doc.emotion || 'neutral_emotion').toLowerCase();
-            acc[e] = (acc[e] || 0) + 1;
-            return acc;
-        }, {});
-        const emotionSummary = Object.entries(emotionCounts)
-            .map(([e, c]) => `${c} ${e}`)
-            .join(', ');
-        const namedPersonsSummary = buildNamedPersonsSummary(filteredResults);
-
-        if (intent === 'resolved') {
-            const resolutionCategory = detectResolutionCategory(cleanMessage);
-            const resolvedPrompt = `The admin said: "${message}". ${resolutionCategory ? `Category: ${resolutionCategory}.` : ''} The issue has been noted as resolved. Acknowledge warmly in 1-2 sentences.`;
-            const stream = await groq.chat.completions.create({ model:'llama-3.1-8b-instant', messages:[{role:'user',content:resolvedPrompt}], max_tokens:150, temperature:0.4, stream:true });
-            let fullAnswer = '';
-            for await (const chunk of stream) { const text=chunk.choices[0]?.delta?.content||''; if(text){fullAnswer+=text;sendChunk({text});} }
-            if (session) { session.addMessage(message, cleanAIResponse(fullAnswer)); await session.save(); }
-            return endStream();
-        }
-
-        const prompt = buildPrompt(cleanMessage, context, dateRange?.label, detectedCategory, intent, sentimentSummary,emotionSummary, namedPersonsSummary, filteredResults.length);
-        const messages = [
-            { role:'system', content: SYSTEM_PROMPT },
-            ...history.map(h=>([{role:'user',content:h.question},{role:'assistant',content:h.answer}])).flat(),
-            { role:'user', content: prompt }
-        ];
-
-        const stream = await groq.chat.completions.create({ model:'llama-3.1-8b-instant', messages, max_tokens:1200, temperature:0.4, stream:true });
-
-        let fullAnswer    = '';
-        let streamBuffer  = '';
-        let introStripped = false;
-
-        for await (const chunk of stream) {
-            const text = chunk.choices[0]?.delta?.content || '';
-            if (!text) continue;
-            fullAnswer += text;
-            if (!introStripped) {
-                streamBuffer += text;
-                if (streamBuffer.length >= 200 && /[.!?]\s/.test(streamBuffer)) {
-                    const cleaned = cleanAIResponse(streamBuffer);
-                    introStripped = true;
-                    if (cleaned) sendChunk({ text: cleaned });
-                    streamBuffer = '';
-                }
-            } else {
-                sendChunk({ text });
-            }
-        }
-
-        if (streamBuffer) { const c = cleanAIResponse(streamBuffer); if(c) sendChunk({ text: c }); }
-        fullAnswer = cleanAIResponse(fullAnswer);
-        if (session) { session.addMessage(message, fullAnswer); await session.save(); }
-        sendChunk({ done:true, ragResults:filteredResults.length, detectedCategory:detectedCategory||'all', detectedPeriod:dateRange?.label||'all time', intent, sentimentSummary });
+        if (!streamedAnyText && answer?.trim()) sendChunk({ text: answer });
+        sendChunk({ done: true, ...meta });
         endStream();
-
-    } catch(err) {
-        console.error('Stream route error:', err.message);
-        try { res.write(`data: ${JSON.stringify({error:'Something went wrong. Please try again.'})}\n\n`); res.write(`data: [DONE]\n\n`); res.end(); } catch(e) {}
+    } catch (err) {
+        console.error('[/chat/stream] Error:', err.message);
+        try { sendChunk({ error: 'Something went wrong. Please try again.' }); endStream(); } catch (_) {}
     }
 });
 
+// ─────────────────────────────────────────────────────────────────────────────
+// GET /session/:sessionId — restore chat history on page refresh
+// ─────────────────────────────────────────────────────────────────────────────
 router.get('/session/:sessionId', async (req, res) => {
     try {
         const session = await ChatSession.findOne({ sessionId: req.params.sessionId });
-        if (!session) return res.json({ success:true, history:[], isNew:true });
-        res.json({ success:true, history:session.messages.slice(-20), isNew:false });
-    } catch(err) { res.status(500).json({ success:false, message:'Failed to load session.' }); }
+        if (!session) return res.json({ success: true, history: [], isNew: true });
+        res.json({ success: true, history: session.messages.slice(-20), isNew: false });
+    } catch (err) {
+        res.status(500).json({ success: false, message: 'Failed to load session.' });
+    }
 });
 
+// ─────────────────────────────────────────────────────────────────────────────
+// DELETE /session/:sessionId — clear session when admin clicks "Clear chat"
+// ─────────────────────────────────────────────────────────────────────────────
 router.delete('/session/:sessionId', async (req, res) => {
     try {
         await ChatSession.findOneAndDelete({ sessionId: req.params.sessionId });
-        res.json({ success:true, message:'Session cleared.' });
-    } catch(err) { res.status(500).json({ success:false, message:'Failed to clear session.' }); }
+        res.json({ success: true, message: 'Session cleared.' });
+    } catch (err) {
+        res.status(500).json({ success: false, message: 'Failed to clear session.' });
+    }
 });
 
+// ─────────────────────────────────────────────────────────────────────────────
+// GET /summary/:id
+// Generates a 2-3 sentence summary for a single Feedback document.
+// Returns cached summary if one already exists on the document.
+// ─────────────────────────────────────────────────────────────────────────────
 router.get('/summary/:id', async (req, res) => {
     try {
         const feedbackItem = await Feedback.findById(req.params.id);
-        if (!feedbackItem) return res.status(404).json({ success:false, message:'Feedback not found.' });
-        if (feedbackItem.summary) return res.json({ success:true, summary:feedbackItem.summary, cached:true });
+        if (!feedbackItem) return res.status(404).json({ success: false, message: 'Feedback not found.' });
+        if (feedbackItem.summary) return res.json({ success: true, summary: feedbackItem.summary, cached: true });
 
-        const rawFeedback = feedbackItem.evidenceText
+        const rawText  = feedbackItem.evidenceText
             ? `${feedbackItem.feedback}. Additional detail: ${feedbackItem.evidenceText}`
             : feedbackItem.feedback;
+        const tagsLine = feedbackItem.tags?.length ? `Tags: ${feedbackItem.tags.join(', ')}` : 'Tags: none';
 
-        const summarySystemPrompt = `You are a professional feedback summarizer for a university administration system. Produce clean concise admin-ready summaries. Factual neutral third person always.`;
         const summaryPrompt = `Summarize this student feedback for a university admin dashboard.
-Feedback: "${rawFeedback}"
-Category: ${feedbackItem.category||'Unknown'} | Sentiment: ${feedbackItem.sentiment||'Unknown'}
-Write a clear 2-3 sentence professional summary in third person. Capture the core issue mention urgency if clear. No opinions or recommendations.`;
 
-        const summary = await generateAIResponse(summaryPrompt, [], summarySystemPrompt);
+Feedback: "${rawText}"
+Sentiment: ${feedbackItem.sentiment || 'unknown'} | Emotion: ${feedbackItem.emotion || 'neutral'}
+${tagsLine} | Topic: ${feedbackItem.topicLabel || 'unclassified'}
+
+Write a clear 2-3 sentence professional summary in third person.
+Capture the core issue. Mention urgency if clearly indicated.
+No opinions. No recommendations. Factual and neutral.`;
+
+        const summary = await generateAIResponse(
+            summaryPrompt,
+            [],
+            `You are a professional feedback summarizer for a university administration system. Always write in factual, neutral, third-person language.`
+        );
+
         await Feedback.findByIdAndUpdate(feedbackItem._id, { summary });
-        res.json({ success:true, summary, cached:false });
-    } catch(err) {
-        console.error('Summary error:', err.message);
-        res.status(500).json({ success:false, message:'Failed to generate summary.' });
+        res.json({ success: true, summary, cached: false });
+    } catch (err) {
+        console.error('[/summary] Error:', err.message);
+        res.status(500).json({ success: false, message: 'Failed to generate summary.' });
     }
 });
 

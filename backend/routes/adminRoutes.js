@@ -1,76 +1,167 @@
-// Express router setup for admin routes
-const express    = require('express');
-const router     = express.Router();
-const multer     = require('multer');
-const jwt        = require('jsonwebtoken');
+const express = require('express');
+const router = express.Router();
+const multer = require('multer');
+const jwt = require('jsonwebtoken');
 const cloudinary = require('../config/cloudinary');
 
-// Models
-const Feedback   = require('../models/Feedback');
-const Admin      = require('../models/Admin');
+const Feedback = require('../models/Feedback');
+const Admin = require('../models/Admin');
 const Resolution = require('../models/Resolution');
+const { processFeedbackJob } = require('../services/processFeedbackJob');
 
-// ── Multer — memory storage ───────────────────────────────────────────────────
 const upload = multer({
   storage: multer.memoryStorage(),
   fileFilter: (req, file, cb) => {
     const allowed = /jpeg|jpg|png|gif/;
-    const valid = allowed.test(file.mimetype) && allowed.test(file.originalname.toLowerCase());
+    const valid =
+      allowed.test(file.mimetype) &&
+      allowed.test(file.originalname.toLowerCase());
+
     valid ? cb(null, true) : cb(new Error('Only image files are allowed'));
   },
   limits: { fileSize: 5 * 1024 * 1024 }
 });
 
-// ── Auth middleware ───────────────────────────────────────────────────────────
 const auth = (req, res, next) => {
   const token = req.headers.authorization?.split(' ')[1];
-  if (!token) return res.status(401).json({ success: false, message: 'No token provided' });
+
+  if (!token) {
+    return res.status(401).json({
+      success: false,
+      message: 'No token provided'
+    });
+  }
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     req.adminId = decoded.id;
     next();
   } catch {
-    res.status(401).json({ success: false, message: 'Invalid token' });
+    res.status(401).json({
+      success: false,
+      message: 'Invalid token'
+    });
   }
 };
 
-// ── Helper — calculate start date based on filter value ──────────────────────
-const getStartDate = (filter) => {
+const getStartDate = filter => {
+  const d = new Date();
+
   if (filter === '7days') {
-    const d = new Date();
     d.setDate(d.getDate() - 7);
     return d;
   }
+
   if (filter === '30days') {
-    const d = new Date();
     d.setDate(d.getDate() - 30);
     return d;
   }
+
   if (filter === 'semester') {
-    const d = new Date();
     d.setMonth(d.getMonth() - 4);
     return d;
   }
+
   return null;
 };
 
-// ── Helper — upload buffer to Cloudinary ─────────────────────────────────────
 const uploadToCloudinary = (buffer, folder) => {
   return new Promise((resolve, reject) => {
     const stream = cloudinary.uploader.upload_stream(
       {
         folder,
-        transformation: [{ width: 200, height: 200, crop: 'fill', gravity: 'face' }]
+        transformation: [
+          { width: 200, height: 200, crop: 'fill', gravity: 'face' }
+        ]
       },
       (error, result) => {
         if (result) resolve(result);
         else reject(error);
       }
     );
+
     stream.end(buffer);
   });
 };
+
+const buildFeedbackQuery = queryParams => {
+  const {
+    category,
+    topic,
+    status,
+    sentiment,
+    emotion,
+    filter,
+    search,
+    ragStatus
+  } = queryParams;
+
+  const query = {};
+
+  const selectedCategory = category || topic;
+
+  if (selectedCategory && selectedCategory !== 'all') {
+    query.$or = [
+      { topicLabel: selectedCategory },
+      { topicShortLabel: selectedCategory },
+      { category: selectedCategory },
+      { tags: selectedCategory }
+    ];
+  }
+
+  if (status && status !== 'all') {
+    query.status = status;
+  }
+
+  if (sentiment && sentiment !== 'all') {
+    query.sentiment = sentiment;
+  }
+
+  if (emotion && emotion !== 'all') {
+    query.emotion = emotion;
+  }
+
+  if (ragStatus && ragStatus !== 'all') {
+    query.ragStatus = ragStatus;
+  }
+
+  const startDate = getStartDate(filter);
+  if (startDate) {
+    query.createdAt = { $gte: startDate };
+  }
+
+  if (search && search.trim()) {
+    const regex = new RegExp(search.trim(), 'i');
+
+    query.$and = query.$and || [];
+    query.$and.push({
+      $or: [
+        { feedback: regex },
+        { evidenceText: regex },
+        { topicLabel: regex },
+        { topicShortLabel: regex },
+        { tags: regex },
+        { anonymous_id: regex }
+      ]
+    });
+  }
+
+  return query;
+};
+
+const getCategoryField = () => ({
+  $ifNull: [
+    '$topicLabel',
+    {
+      $ifNull: [
+        '$topicShortLabel',
+        {
+          $ifNull: ['$category', 'Uncategorized']
+        }
+      ]
+    }
+  ]
+});
 
 // ============================================================
 // PROFILE ROUTES
@@ -79,21 +170,29 @@ const uploadToCloudinary = (buffer, folder) => {
 router.get('/profile', auth, async (req, res) => {
   try {
     const admin = await Admin.findById(req.adminId).select('-password');
+
     if (!admin) {
-      return res.status(404).json({ success: false, message: 'Admin not found' });
+      return res.status(404).json({
+        success: false,
+        message: 'Admin not found'
+      });
     }
+
     res.json({
       success: true,
       data: {
-        name:           admin.name,
-        email:          admin.email,
+        name: admin.name,
+        email: admin.email,
         profilePicture: admin.profilePicture,
-        role:           admin.role
+        role: admin.role
       }
     });
   } catch (error) {
-    console.error('Error fetching profile:', error);
-    res.status(500).json({ success: false, message: 'Server error' });
+    console.error('Profile fetch error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error'
+    });
   }
 });
 
@@ -102,7 +201,7 @@ router.put('/profile', auth, upload.single('profilePicture'), async (req, res) =
     const { name, email } = req.body;
     const updateData = {};
 
-    if (name)  updateData.name  = name;
+    if (name) updateData.name = name;
     if (email) updateData.email = email;
 
     if (req.file) {
@@ -119,99 +218,123 @@ router.put('/profile', auth, upload.single('profilePicture'), async (req, res) =
     res.json({
       success: true,
       data: {
-        name:           admin.name,
-        email:          admin.email,
+        name: admin.name,
+        email: admin.email,
         profilePicture: admin.profilePicture,
-        role:           admin.role
+        role: admin.role
       }
     });
   } catch (error) {
-    console.error('Error updating profile:', error);
-    res.status(500).json({ success: false, message: 'Server error' });
+    console.error('Profile update error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error'
+    });
   }
 });
 
 // ============================================================
-// NOTIFICATION PREFERENCES ROUTES
+// NOTIFICATION PREFERENCES
 // ============================================================
 
 router.get('/notification-prefs', auth, async (req, res) => {
   try {
     const admin = await Admin.findById(req.adminId).select('notificationPrefs');
+
     res.json({
       success: true,
       data: admin?.notificationPrefs || {
         emailWeeklyReport: true,
-        emailSpikeAlert:   true,
-        emailInactivity:   true
+        emailSpikeAlert: true,
+        emailInactivity: true
       }
     });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
   }
 });
 
 router.put('/notification-prefs', auth, async (req, res) => {
   try {
     const { emailWeeklyReport, emailSpikeAlert, emailInactivity } = req.body;
+
     await Admin.findByIdAndUpdate(req.adminId, {
-      notificationPrefs: { emailWeeklyReport, emailSpikeAlert, emailInactivity }
+      notificationPrefs: {
+        emailWeeklyReport,
+        emailSpikeAlert,
+        emailInactivity
+      }
     });
-    res.json({ success: true, message: 'Preferences saved' });
+
+    res.json({
+      success: true,
+      message: 'Preferences saved'
+    });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
   }
 });
 
 // ============================================================
-// FEEDBACK ROUTES
+// FEEDBACK LIST
 // ============================================================
 
 router.get('/feedback', auth, async (req, res) => {
   try {
-    const { category, status, sentiment,emotion , sort, limit, page, filter } = req.query;
-    const query = {};
+    const {
+      sort,
+      limit,
+      page
+    } = req.query;
 
-    if (category  && category  !== 'all') query.category  = category;
-    if (status    && status    !== 'all') query.status    = status;
-    if (sentiment && sentiment !== 'all') query.sentiment = sentiment;
-    if (emotion  && emotion  !== 'all') query.emotion  = emotion;
+    const query = buildFeedbackQuery(req.query);
 
-    const startDate = getStartDate(filter);
-    if (startDate) query.createdAt = { $gte: startDate };
+    const sortOption = sort === 'oldest'
+      ? { createdAt: 1 }
+      : { createdAt: -1 };
 
-    const sortOption = sort === 'oldest' ? { createdAt: 1 } : { createdAt: -1 };
-    const limitNum   = parseInt(limit) || 20;
-    const pageNum    = parseInt(page)  || 1;
+    const limitNum = Math.max(parseInt(limit, 10) || 20, 1);
+    const pageNum = Math.max(parseInt(page, 10) || 1, 1);
 
-    const feedback = await Feedback.find(query)
-      .sort(sortOption)
-      .skip((pageNum - 1) * limitNum)
-      .limit(limitNum);
+    const [feedback, total] = await Promise.all([
+      Feedback.find(query)
+        .sort(sortOption)
+        .skip((pageNum - 1) * limitNum)
+        .limit(limitNum)
+        .lean(),
 
-    const total = await Feedback.countDocuments(query);
+      Feedback.countDocuments(query)
+    ]);
 
     res.json({
       success: true,
-      data:    feedback,
+      data: feedback,
       total,
-      page:    pageNum,
-      pages:   Math.ceil(total / limitNum)
+      page: pageNum,
+      pages: Math.ceil(total / limitNum)
     });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    console.error('Feedback list error:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
   }
 });
 
-// GET /api/admin/analytics — dashboard stats with date filtering
+// ============================================================
+// DASHBOARD ANALYTICS
+// ============================================================
+
 router.get('/analytics', auth, async (req, res) => {
   try {
-    const { filter } = req.query;
-    const startDate  = getStartDate(filter);
-    const matchQuery = startDate ? { createdAt: { $gte: startDate } } : {};
-
-    console.log('Filter received:', filter);
-    console.log('Match query:', matchQuery);
+    const matchQuery = buildFeedbackQuery(req.query);
 
     const thisWeekStart = new Date();
     thisWeekStart.setDate(thisWeekStart.getDate() - 7);
@@ -231,62 +354,201 @@ router.get('/analytics', auth, async (req, res) => {
       thisWeekCount,
       lastWeekCount,
       categoryStats,
+      sentimentStats,
+      emotionStats,
       timeStats,
-      // ── NEW: emotion counts aggregation ──────────────────────
-      emotionStats
+      ragStats,
+      topTags
     ] = await Promise.all([
       Feedback.countDocuments(matchQuery),
-      Feedback.countDocuments({ ...matchQuery, sentiment: 'positive' }),
-      Feedback.countDocuments({ ...matchQuery, sentiment: 'neutral'  }),
-      Feedback.countDocuments({ ...matchQuery, sentiment: 'negative' }),
-      Resolution.countDocuments({ ...matchQuery, isPublished: true }),
-      Feedback.countDocuments({ createdAt: { $gte: thisWeekStart } }),
-      Feedback.countDocuments({ createdAt: { $gte: lastWeekStart, $lte: lastWeekEnd } }),
-      Feedback.aggregate([
-          { $match: matchQuery },
-          { $group: {
-              _id: '$category',
-              count:   { $sum: 1 },
-              emotions: { $push: '$emotion' }
-          }},
-          { $sort: { count: -1 } }
-      ]),
+
+      Feedback.countDocuments({
+        ...matchQuery,
+        sentiment: 'positive'
+      }),
+
+      Feedback.countDocuments({
+        ...matchQuery,
+        sentiment: 'neutral'
+      }),
+
+      Feedback.countDocuments({
+        ...matchQuery,
+        sentiment: 'negative'
+      }),
+
+      Resolution.countDocuments({
+        isPublished: true
+      }),
+
+      Feedback.countDocuments({
+        createdAt: { $gte: thisWeekStart }
+      }),
+
+      Feedback.countDocuments({
+        createdAt: {
+          $gte: lastWeekStart,
+          $lte: lastWeekEnd
+        }
+      }),
+
       Feedback.aggregate([
         { $match: matchQuery },
         {
           $group: {
-            _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } },
-            feedback: { $sum: 1 }
+            _id: getCategoryField(),
+            count: { $sum: 1 },
+            positive: {
+              $sum: {
+                $cond: [{ $eq: ['$sentiment', 'positive'] }, 1, 0]
+              }
+            },
+            neutral: {
+              $sum: {
+                $cond: [{ $eq: ['$sentiment', 'neutral'] }, 1, 0]
+              }
+            },
+            negative: {
+              $sum: {
+                $cond: [{ $eq: ['$sentiment', 'negative'] }, 1, 0]
+              }
+            },
+            emotions: { $push: '$emotion' },
+            tags: { $push: '$tags' }
+          }
+        },
+        { $sort: { count: -1 } }
+      ]),
+
+      Feedback.aggregate([
+        { $match: matchQuery },
+        {
+          $group: {
+            _id: {
+              $ifNull: ['$sentiment', 'unknown']
+            },
+            count: { $sum: 1 }
+          }
+        }
+      ]),
+
+      Feedback.aggregate([
+        { $match: matchQuery },
+        {
+          $group: {
+            _id: {
+              $ifNull: ['$emotion', 'neutral']
+            },
+            count: { $sum: 1 }
+          }
+        },
+        { $sort: { count: -1 } }
+      ]),
+
+      Feedback.aggregate([
+        { $match: matchQuery },
+        {
+          $group: {
+            _id: {
+              $dateToString: {
+                format: '%Y-%m-%d',
+                date: '$createdAt'
+              }
+            },
+            feedback: { $sum: 1 },
+            positive: {
+              $sum: {
+                $cond: [{ $eq: ['$sentiment', 'positive'] }, 1, 0]
+              }
+            },
+            neutral: {
+              $sum: {
+                $cond: [{ $eq: ['$sentiment', 'neutral'] }, 1, 0]
+              }
+            },
+            negative: {
+              $sum: {
+                $cond: [{ $eq: ['$sentiment', 'negative'] }, 1, 0]
+              }
+            }
           }
         },
         { $sort: { _id: 1 } },
         { $limit: 30 }
       ]),
-      // ── NEW: count each emotion label across all feedback ────
-      // Only counts feedback where emotion is not null
+
       Feedback.aggregate([
-        { $match: { ...matchQuery, emotion: { $ne: null } } },
-        { $group: { _id: '$emotion', count: { $sum: 1 } } }
+        { $match: matchQuery },
+        {
+          $group: {
+            _id: {
+              $ifNull: ['$ragStatus', 'not_indexed']
+            },
+            count: { $sum: 1 }
+          }
+        }
+      ]),
+
+      Feedback.aggregate([
+        { $match: matchQuery },
+        { $unwind: '$tags' },
+        {
+          $group: {
+            _id: '$tags',
+            count: { $sum: 1 }
+          }
+        },
+        { $sort: { count: -1 } },
+        { $limit: 10 }
       ])
     ]);
 
-    const overallScore = total > 0 ? (positive - negative) / total : 0;
+    const overallScore = total > 0
+      ? Math.round(((positive - negative) / total) * 100) / 100
+      : 0;
 
-    // ── NEW: convert emotion array to flat object ────────────
-    // e.g. [{ _id: 'angry', count: 4 }] → { angry: 4, ... }
-    const emotions = {
-      excited:         0,
-      satisfied:       0,
-      hopeful:         0,
-      angry:           0,
-      disappointed:    0,
-      confused:        0,
-      neutral_emotion: 0
+    const sentimentBreakdown = {
+      positive,
+      neutral,
+      negative,
+      overallScore
     };
-    emotionStats.forEach(e => {
-      if (e._id && emotions.hasOwnProperty(e._id)) {
-        emotions[e._id] = e.count;
+
+    sentimentStats.forEach(item => {
+      if (!sentimentBreakdown[item._id]) {
+        sentimentBreakdown[item._id] = item.count;
       }
+    });
+
+    const emotionBreakdown = {};
+    emotionStats.forEach(item => {
+      emotionBreakdown[item._id || 'neutral'] = item.count;
+    });
+
+    const ragBreakdown = {};
+    ragStats.forEach(item => {
+      ragBreakdown[item._id || 'not_indexed'] = item.count;
+    });
+
+    const categoryData = categoryStats.map(category => {
+      const emotionCounts = {};
+
+      (category.emotions || []).forEach(emotion => {
+        const key = emotion || 'neutral';
+        emotionCounts[key] = (emotionCounts[key] || 0) + 1;
+      });
+
+      return {
+        name: category._id || 'Uncategorized',
+        count: category.count,
+        value: category.count,
+        sentiment: {
+          positive: category.positive,
+          neutral: category.neutral,
+          negative: category.negative
+        },
+        emotions: emotionCounts
+      };
     });
 
     res.json({
@@ -295,144 +557,314 @@ router.get('/analytics', auth, async (req, res) => {
         total,
         resolved,
         thisWeekCount,
-        lastWeekCount
+        lastWeekCount,
+        changeFromLastWeek: thisWeekCount - lastWeekCount
       },
       sentiment: {
-        positive,
-        neutral,
-        negative,
-        overallScore: Math.round(overallScore * 100) / 100,
-        emotions      // ← added: emotion breakdown for dashboard chart
+        ...sentimentBreakdown,
+        emotions: emotionBreakdown
       },
-      categoryData: categoryStats.map(c => {
-          const emotionCounts = {};
-          (c.emotions || []).forEach(e => {
-              const key = e || 'neutral_emotion';
-              emotionCounts[key] = (emotionCounts[key] || 0) + 1;
-          });
-          if (Object.keys(emotionCounts).length > 1) {
-              delete emotionCounts['neutral_emotion'];
-          }
-          return {
-              name:     c._id,
-              count:    c.count,
-              value:    c.count,
-              emotions: emotionCounts
-          };
-      }),
-      timeData: timeStats.map(t => ({
-        date:     t._id,
-        feedback: t.feedback
+      rag: ragBreakdown,
+      categoryData,
+      timeData: timeStats.map(item => ({
+        date: item._id,
+        feedback: item.feedback,
+        positive: item.positive,
+        neutral: item.neutral,
+        negative: item.negative
+      })),
+      topTags: topTags.map(tag => ({
+        name: tag._id,
+        count: tag.count
       }))
     });
   } catch (error) {
     console.error('Analytics error:', error);
-    res.status(500).json({ success: false, message: error.message });
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
   }
 });
 
-// GET /api/admin/stats/time
+// ============================================================
+// FILTER OPTIONS FOR DASHBOARD DROPDOWNS
+// ============================================================
+
+router.get('/filters', auth, async (req, res) => {
+  try {
+    const [
+      categories,
+      sentiments,
+      emotions,
+      statuses,
+      ragStatuses
+    ] = await Promise.all([
+      Feedback.aggregate([
+        {
+          $group: {
+            _id: getCategoryField()
+          }
+        },
+        { $sort: { _id: 1 } }
+      ]),
+
+      Feedback.distinct('sentiment'),
+      Feedback.distinct('emotion'),
+      Feedback.distinct('status'),
+      Feedback.distinct('ragStatus')
+    ]);
+
+    res.json({
+      success: true,
+      data: {
+        categories: categories
+          .map(c => c._id)
+          .filter(Boolean),
+
+        sentiments: sentiments.filter(Boolean),
+        emotions: emotions.filter(Boolean),
+        statuses: statuses.filter(Boolean),
+        ragStatuses: ragStatuses.filter(Boolean)
+      }
+    });
+  } catch (error) {
+    console.error('Filters error:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+});
+
+// ============================================================
+// TIME SERIES
+// ============================================================
+
 router.get('/stats/time', auth, async (req, res) => {
   try {
     const { period, filter } = req.query;
+
     let days = 7;
-    if (period === '30d'  || filter === '30days')  days = 30;
-    if (period === '90d')                           days = 90;
+
+    if (period === '30d' || filter === '30days') days = 30;
+    if (period === '90d') days = 90;
     if (period === 'year' || filter === 'semester') days = 365;
 
     const startDate = new Date();
     startDate.setDate(startDate.getDate() - days);
 
     const timeStats = await Feedback.aggregate([
-      { $match: { createdAt: { $gte: startDate } } },
-      { $group: { _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } }, feedback: { $sum: 1 } } },
+      {
+        $match: {
+          createdAt: { $gte: startDate }
+        }
+      },
+      {
+        $group: {
+          _id: {
+            $dateToString: {
+              format: '%Y-%m-%d',
+              date: '$createdAt'
+            }
+          },
+          feedback: { $sum: 1 },
+          positive: {
+            $sum: {
+              $cond: [{ $eq: ['$sentiment', 'positive'] }, 1, 0]
+            }
+          },
+          neutral: {
+            $sum: {
+              $cond: [{ $eq: ['$sentiment', 'neutral'] }, 1, 0]
+            }
+          },
+          negative: {
+            $sum: {
+              $cond: [{ $eq: ['$sentiment', 'negative'] }, 1, 0]
+            }
+          }
+        }
+      },
       { $sort: { _id: 1 } }
     ]);
 
-    res.json({ success: true, data: timeStats.map(t => ({ date: t._id, feedback: t.feedback })) });
+    res.json({
+      success: true,
+      data: timeStats.map(item => ({
+        date: item._id,
+        feedback: item.feedback,
+        positive: item.positive,
+        neutral: item.neutral,
+        negative: item.negative
+      }))
+    });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    console.error('Time stats error:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
   }
 });
 
-// GET /api/admin/trends
+// ============================================================
+// TRENDS
+// ============================================================
+
 router.get('/trends', auth, async (req, res) => {
   try {
-    const { filter } = req.query;
-    const startDate  = getStartDate(filter);
-    const matchQuery = startDate ? { createdAt: { $gte: startDate } } : {};
+    const matchQuery = buildFeedbackQuery(req.query);
 
     const thisWeekStart = new Date();
     thisWeekStart.setDate(thisWeekStart.getDate() - 7);
 
     const lastWeekStart = new Date();
     lastWeekStart.setDate(lastWeekStart.getDate() - 14);
+
     const lastWeekEnd = new Date();
     lastWeekEnd.setDate(lastWeekEnd.getDate() - 7);
 
-    const trends   = await Feedback.aggregate([
+    const trends = await Feedback.aggregate([
       { $match: matchQuery },
-      { $group: { _id: '$category', count: { $sum: 1 } } },
+      {
+        $group: {
+          _id: getCategoryField(),
+          count: { $sum: 1 },
+          negative: {
+            $sum: {
+              $cond: [{ $eq: ['$sentiment', 'negative'] }, 1, 0]
+            }
+          }
+        }
+      },
       { $sort: { count: -1 } },
       { $limit: 10 }
     ]);
 
     const thisWeek = await Feedback.aggregate([
-      { $match: { createdAt: { $gte: thisWeekStart } } },
-      { $group: { _id: '$category', count: { $sum: 1 } } }
+      {
+        $match: {
+          createdAt: { $gte: thisWeekStart }
+        }
+      },
+      {
+        $group: {
+          _id: getCategoryField(),
+          count: { $sum: 1 }
+        }
+      }
     ]);
 
     const lastWeek = await Feedback.aggregate([
-      { $match: { createdAt: { $gte: lastWeekStart, $lte: lastWeekEnd } } },
-      { $group: { _id: '$category', count: { $sum: 1 } } }
+      {
+        $match: {
+          createdAt: {
+            $gte: lastWeekStart,
+            $lte: lastWeekEnd
+          }
+        }
+      },
+      {
+        $group: {
+          _id: getCategoryField(),
+          count: { $sum: 1 }
+        }
+      }
     ]);
 
     const thisWeekMap = {};
     const lastWeekMap = {};
-    thisWeek.forEach(t => thisWeekMap[t._id] = t.count);
-    lastWeek.forEach(t => lastWeekMap[t._id] = t.count);
 
-    const formatted = trends.map(t => {
-      const thisCount = thisWeekMap[t._id] || 0;
-      const lastCount = lastWeekMap[t._id] || 0;
+    thisWeek.forEach(item => {
+      thisWeekMap[item._id || 'Uncategorized'] = item.count;
+    });
+
+    lastWeek.forEach(item => {
+      lastWeekMap[item._id || 'Uncategorized'] = item.count;
+    });
+
+    const formatted = trends.map(item => {
+      const title = item._id || 'Uncategorized';
+      const thisCount = thisWeekMap[title] || 0;
+      const lastCount = lastWeekMap[title] || 0;
 
       let trend = 'stable';
       if (thisCount > lastCount) trend = 'up';
       if (thisCount < lastCount) trend = 'down';
 
       return {
-        title:    t._id,
-        count:    t.count,
+        title,
+        count: item.count,
+        negative: item.negative,
         trend,
         thisWeek: thisCount,
         lastWeek: lastCount,
-        change:   thisCount - lastCount
+        change: thisCount - lastCount
       };
     });
 
-    res.json({ success: true, data: formatted });
+    res.json({
+      success: true,
+      data: formatted
+    });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
-  }
-});
-
-// PUT /api/admin/feedback/:id
-router.put('/feedback/:id', auth, async (req, res) => {
-  try {
-    const { status, admin_notes } = req.body;
-    const feedback = await Feedback.findByIdAndUpdate(
-      req.params.id,
-      { status, admin_notes },
-      { new: true }
-    );
-    res.json({ success: true, data: feedback });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    console.error('Trends error:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
   }
 });
 
 // ============================================================
-// RESOLUTION ROUTES
+// UPDATE FEEDBACK
+// ============================================================
+
+router.put('/feedback/:id', auth, async (req, res) => {
+  try {
+    const {
+      status,
+      admin_notes,
+      topicLabel,
+      topicShortLabel
+    } = req.body;
+
+    const updateData = {};
+
+    if (status !== undefined) updateData.status = status;
+    if (admin_notes !== undefined) updateData.admin_notes = admin_notes;
+    if (topicLabel !== undefined) updateData.topicLabel = topicLabel;
+    if (topicShortLabel !== undefined) updateData.topicShortLabel = topicShortLabel;
+
+    const feedback = await Feedback.findByIdAndUpdate(
+      req.params.id,
+      updateData,
+      { new: true }
+    );
+
+    if (!feedback) {
+      return res.status(404).json({
+        success: false,
+        message: 'Feedback not found'
+      });
+    }
+
+    res.json({
+      success: true,
+      data: feedback
+    });
+  } catch (error) {
+    console.error('Feedback update error:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+});
+
+// ============================================================
+// RESOLUTIONS
 // ============================================================
 
 router.get('/resolutions', auth, async (req, res) => {
@@ -440,36 +872,96 @@ router.get('/resolutions', auth, async (req, res) => {
     const resolutions = await Resolution.find()
       .sort({ createdAt: -1 })
       .populate('resolvedBy', 'name');
-    res.json({ success: true, data: resolutions });
+
+    res.json({
+      success: true,
+      data: resolutions
+    });
   } catch (error) {
-    res.status(500).json({ success: false, message: 'Server error' });
+    console.error('Resolutions fetch error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error'
+    });
   }
 });
 
 router.post('/resolutions', auth, async (req, res) => {
   try {
-    const { title, description, category, affectedFeedbackIds } = req.body;
+    const {
+      title,
+      description,
+      category,
+      affectedFeedbackIds
+    } = req.body;
+
     const resolution = new Resolution({
       title,
       description,
       category,
       affectedFeedbackIds: affectedFeedbackIds || [],
-      resolvedBy:          req.adminId,
-      isPublished:         true
+      resolvedBy: req.adminId,
+      isPublished: true
     });
+
     await resolution.save();
-    res.status(201).json({ success: true, data: resolution });
+
+    res.status(201).json({
+      success: true,
+      data: resolution
+    });
   } catch (error) {
-    res.status(500).json({ success: false, message: 'Server error' });
+    console.error('Resolution create error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error'
+    });
   }
 });
+
+// Reprocess feedback through RAG and categorisation
+router.post('/feedback/:id/reprocess', async (req, res) => {
+  try {
+    const feedback = await Feedback.findById(req.params.id);
+
+    if (!feedback) {
+      return res.status(404).json({
+        success: false,
+        message: 'Feedback not found',
+      });
+    }
+
+    await processFeedbackJob(feedback._id);
+
+    res.json({
+      success: true,
+      message: 'Feedback reprocessed successfully',
+    });
+  } catch (error) {
+    console.error('Reprocess feedback error:', error.message);
+
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to reprocess feedback',
+    });
+  }
+});
+
 
 router.delete('/resolutions/:id', auth, async (req, res) => {
   try {
     await Resolution.findByIdAndDelete(req.params.id);
-    res.json({ success: true, message: 'Resolution deleted' });
+
+    res.json({
+      success: true,
+      message: 'Resolution deleted'
+    });
   } catch (error) {
-    res.status(500).json({ success: false, message: 'Server error' });
+    console.error('Resolution delete error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error'
+    });
   }
 });
 

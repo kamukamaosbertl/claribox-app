@@ -20,7 +20,6 @@ const font = "'Plus Jakarta Sans', 'DM Sans', sans-serif";
 
 const menuItems = [
   { path: '/admin/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-  { path: '/admin/chat', icon: Bot, label: 'AI Assistant' },
   { path: '/admin/insights', icon: PieChart, label: 'Category Insights' },
   { path: '/admin/reports', icon: FileText, label: 'Reports' },
   { path: '/admin/feedback', icon: MessageSquare, label: 'All Feedback' },
@@ -344,64 +343,6 @@ const AdminSidebar = ({ isOpen, onClose }) => {
                 </NavLink>
               ))}
         </nav>
-
-      {/* ── AI CTA card ───────────────────────────────────── */}
-      {loading ? (
-        <SkeletonCTACard />
-      ) : (
-        <div
-          className="mx-[10px] my-3 rounded-2xl p-4 relative overflow-hidden border border-[rgba(37,99,235,0.35)] z-10"
-          style={{
-            background: 'linear-gradient(135deg, #1E3A8A 0%, #2563EB 55%, #1D4ED8 100%)',
-            boxShadow: '0 8px 24px rgba(37,99,235,0.20)',
-            animation: 'contentReveal 0.4s ease',
-          }}
-        >
-          {/* Decorative circle */}
-          <div className="absolute top-[-16px] right-[-16px] w-[70px] h-[70px] rounded-full bg-white/[0.08] pointer-events-none" />
-          {/* Grid overlay */}
-          <div
-            className="absolute inset-0 pointer-events-none"
-            style={{
-              backgroundImage:
-                'linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px)',
-              backgroundSize: '20px 20px',
-            }}
-          />
-
-          <div className="relative flex items-center gap-2 mb-2">
-            <div className="w-7 h-7 rounded-lg shrink-0 bg-white/15 border border-white/20 flex items-center justify-center">
-              <Bot size={14} color="#FFFFFF" />
-            </div>
-            <span
-              className="text-[13px] font-extrabold text-white tracking-[-0.02em]"
-              style={{ fontFamily: font }}
-            >
-              AI Assistant
-            </span>
-            <div className="ml-auto flex items-center gap-[3px] bg-[rgba(251,191,36,0.18)] border border-[rgba(251,191,36,0.28)] rounded-[20px] px-[7px] py-[2px]">
-              <Zap size={9} color="#FCD34D" />
-              <span className="text-[9px] font-bold text-[#FCD34D] tracking-[0.04em]">AI</span>
-            </div>
-          </div>
-
-          <p className="relative text-[11.5px] text-white/[0.68] my-0 mb-3 leading-[1.55]">
-            Analyze feedback and generate instant reports.
-          </p>
-
-          <NavLink
-            to="/admin/chat"
-            onClick={onClose}
-            className="relative block w-full py-2 rounded-[10px] bg-white text-[#1D4ED8] text-[12px] font-extrabold text-center no-underline tracking-[-0.01em] border border-white/90"
-            style={{
-              boxShadow: '0 2px 8px rgba(0,0,0,0.12)',
-              fontFamily: font,
-            }}
-          >
-            Start Chat →
-          </NavLink>
-        </div>
-      )}
 
       {/* ── Logout ────────────────────────────────────────── */}
       <div className="px-[10px] pt-2 pb-4 border-t border-white/5 shrink-0 relative z-10">

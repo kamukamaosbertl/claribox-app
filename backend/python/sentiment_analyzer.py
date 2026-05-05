@@ -1,318 +1,309 @@
-# backend/python/sentiment_analyzer.py
-# ─────────────────────────────────────────────────────────────────
-# VERSION 4 — VADER + Keyword Emotion Detection
-# ─────────────────────────────────────────────────────────────────
+# =============================================================================
+# sentiment_analyzer.py
+#
+# Purpose:
+#   Analyze student feedback and return:
+#     1. sentiment: positive / negative / neutral
+#     2. sentiment confidence score
+#     3. emotion: joy / anger / sadness / fear / surprise / disgust / neutral
+#
+# Why this version is corrected:
+#   - The actual sentiment model is tabularisai/robust-sentiment-analysis.
+#   - That model may return labels like:
+#       LABEL_0, LABEL_1, LABEL_2, LABEL_3, LABEL_4
+#     OR text labels like:
+#       Very Negative, Negative, Neutral, Positive, Very Positive
+#   - The previous code only handled text labels.
+#   - So when the model returned LABEL_3 or LABEL_4, your code failed to recognize it
+#     and defaulted to neutral.
+#   - That is why clearly positive feedback showed as Neutral.
+#
+# Install:
+#   pip install transformers torch
+# =============================================================================
 
+import json
 import os
 import sys
-import re
-import json
 import warnings
 
-warnings.filterwarnings('ignore')
+warnings.filterwarnings("ignore")
+os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
 
-from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
+# =============================================================================
+# MODEL NAMES
+# =============================================================================
 
-# ── Shared analyser instance ─────────────────────────────────────
-_vader = SentimentIntensityAnalyzer()
+_SENTIMENT_MODEL = "tabularisai/robust-sentiment-analysis"
+_EMOTION_MODEL = "j-hartmann/emotion-english-distilroberta-base"
 
-# ── Contrast words — triggers mixed/neutral override ────────────
-CONTRAST_WORDS = [
-    'but', 'however', 'although', 'though', 'yet',
-    'on the other hand', 'not always', 'other times',
-    'it depends', 'depends', 'varies'
-]
+_SENTIMENT_FALLBACK = "neutral"
+_EMOTION_FALLBACK = "neutral"
 
-# ── Phrase rules ─────────────────────────────────────────────────
-PHRASE_RULES = [
-    (r'\bnot bad\b',             0.30, 'satisfied',        'blend'),
-    (r'\bnot terrible\b',        0.25, 'satisfied',        'blend'),
-    (r'\bnot awful\b',           0.25, 'satisfied',        'blend'),
-    (r'\bnot good\b',           -0.35, 'disappointed',     'override'),
-    (r'\bnot great\b',          -0.30, 'disappointed',     'override'),
-    (r'\bnot helpful\b',        -0.35, 'disappointed',     'override'),
-    (r'\bnot intuitive\b',      -0.40, 'confused',         'override'),
-    (r'\bnot clear\b',          -0.35, 'confused',         'override'),
-    (r'\bnot easy to use\b',    -0.45, 'confused',         'override'),
-    (r'\bnot slow\b',            0.08, 'satisfied',        'override'),
-    (r'\btoo slow\b',           -0.50, 'disappointed',     'override'),
-    (r'\btakes forever\b',      -0.50, 'angry',            'override'),
-    (r'\bnever works\b',        -0.60, 'angry',            'override'),
-    (r'\balways broken\b',      -0.60, 'angry',            'override'),
-    (r'\bnot working\b',        -0.50, 'angry',            'override'),
-    (r'\bkeeps failing\b',      -0.50, 'angry',            'override'),
-    (r'\bcould be better\b',    -0.25, 'disappointed',     'override'),
-    (r'\bexpected more\b',      -0.35, 'disappointed',     'override'),
-    (r'\bwaste of time\b',      -0.60, 'angry',            'override'),
-    (r'\bso confusing\b',       -0.40, 'confused',         'override'),
-    (r'\bhard to use\b',        -0.40, 'confused',         'override'),
-    (r'\bdifficult to use\b',   -0.40, 'confused',         'override'),
-    (r'\bnot sure how to use\b',-0.35, 'confused',         'override'),
-    (r'\bi hate this\b',        -0.70, 'angry',            'override'),
-    (r'\bi hate\b',             -0.65, 'angry',            'override'),
-    (r'\bokay i guess\b',        0.00, 'neutral_emotion',  'override'),
-    (r'\bi hope they improve\b', 0.00, 'hopeful',          'override'),
-    (r'\bhope they improve\b',   0.00, 'hopeful',          'override'),
-    (r'\bcould improve\b',      -0.05, 'hopeful',          'override'),
-    (r'\beasy to use\b',         0.50, 'satisfied',        'blend'),
-    (r'\blove it\b',             0.70, 'excited',          'blend'),
-    (r'\bworks great\b',         0.60, 'satisfied',        'blend'),
-    (r'\bworks perfectly\b',     0.60, 'satisfied',        'blend'),
-    (r'\bhighly recommend\b',    0.70, 'excited',          'blend'),
-    (r'\bgreat experience\b',    0.70, 'excited',          'blend'),
-    (r'\bso helpful\b',          0.60, 'satisfied',        'blend'),
-]
-
-# ── Single-word rules ────────────────────────────────────────────
-SINGLE_WORD_RULES = {
-    'slow':       (-0.4, 'disappointed'),
-    'broken':     (-0.5, 'angry'),
-    'confusing':  (-0.3, 'confused'),
-    'confused':   (-0.3, 'confused'),
-    'unclear':    (-0.3, 'confused'),
-    'laggy':      (-0.4, 'disappointed'),
-    'buggy':      (-0.4, 'disappointed'),
-    'useless':    (-0.6, 'angry'),
-    'terrible':   (-0.6, 'angry'),
-    'awful':      (-0.6, 'angry'),
-    'bad':        (-0.5, 'disappointed'),
-    'poor':       (-0.4, 'disappointed'),
-    'love':       ( 0.6, 'excited'),
-    'perfect':    ( 0.7, 'excited'),
-    'excellent':  ( 0.6, 'excited'),
-    'amazing':    ( 0.7, 'excited'),
-    'awesome':    ( 0.7, 'excited'),
-    'great':      ( 0.5, 'satisfied'),
-    'good':       ( 0.4, 'satisfied'),
-    'clean':      ( 0.3, 'satisfied'),
-    'helpful':    ( 0.4, 'satisfied'),
-    'fast':       ( 0.3, 'satisfied'),
-}
-
-# ── Keyword emotion lists ────────────────────────────────────────
-EMOTION_KEYWORDS = {
-    'angry': [
-        'hate', 'rude', 'furious', 'angry', 'never works', 'waste of time',
-        'useless', 'terrible', 'awful', 'broken', 'always late', 'never waits',
-        'so frustrated', 'unacceptable', 'ridiculous', 'outrageous', 'disgusting',
-        'fed up', 'sick of', 'so annoying', 'appalling', 'pathetic',
-        'unbearable', 'cockroach', 'no running water', 'not safe',
-        'strangers', 'left open', 'completely dead', 'lost my work',
-        'keeps logging out', 'no notice',
-        'keeps logging', 'lost my', 'had to start again', 
-        'lost an assignment', 'keeps crashing',
-    ],
-    'disappointed': [
-        'disappointed', 'expected more', 'could be better', 'poor',
-        'not good', 'not great', 'let down', 'unsatisfied', 'lacking',
-        'difficult', 'slow', 'late', 'unreliable', 'missing', 'substandard',
-        'below average', 'not up to standard', 'underwhelming', 'inadequate',
-        'falling behind', 'inconsistent', 'unfair', 'cannot access',
-        'no time to eat', 'long queue', 'cancels class',
-    ],
-    'confused': [
-        'confused', 'unclear', 'hard to use', 'difficult to use',
-        'not sure', 'confusing', 'complicated', 'dont understand',
-        "don't understand", 'no idea', 'lost', 'makes no sense',
-        'hard to follow', 'not obvious', 'misleading',
-    ],
-    'excited': [
-        'amazing', 'absolutely amazing', 'excellent', 'love', 'fantastic',
-        'incredible', 'outstanding', 'brilliant', 'best', 'wonderful',
-        'so good', 'highly recommend', 'great experience', 'blown away',
-        'impressive', 'superb', 'exceptional', 'top notch',
-        'variety improved',
-    ],
-    'satisfied': [
-        'good', 'comfortable', 'helpful', 'clean', 'better', 'improved',
-        'fresh', 'affordable', 'nice', 'decent', 'works well', 'happy',
-        'pleased', 'satisfied', 'great', 'well done', 'appreciate',
-        'convenient', 'efficient', 'reliable', 'smooth', 'easy',
-        'explains well', 'very clearly', 'makes time', 
-        'extra help', 'always available', 'approachable',
-        'understanding', 'patient', 'dedicated',
-        'supportive',  'resolved',
-    'within one day', 'very helpful',
-    ],
-    'hopeful': [
-        'hope', 'hopefully', 'wish', 'improve', 'should improve',
-        'looking forward', 'expect improvement', 'would be better',
-        'one day', 'in future', 'soon', 'they should', 'please fix',
-        'excellent lecturer', 'best lecturer', 'best teacher',
-        'brilliant lecturer', 'highly recommend',
-    ],
-}
+_sentiment_pipeline = None
+_emotion_pipeline = None
 
 
-# ═══════════════════════════════════════════════════════════════
-# HELPER FUNCTIONS
-# ═══════════════════════════════════════════════════════════════
+def load_models() -> None:
+    """
+    Load both models once and reuse them.
 
-def check_phrase_rules(text_lower):
-    matched_scores, matched_emotions, matched_modes = [], [], []
-    for pattern, score, emotion, mode in PHRASE_RULES:
-        if re.search(pattern, text_lower):
-            matched_scores.append(score)
-            matched_emotions.append(emotion)
-            matched_modes.append(mode)
-    if not matched_scores:
-        return None, None, None, None
-    avg_score = sum(matched_scores) / len(matched_scores)
-    counts = {}
-    for emotion in matched_emotions:
-        counts[emotion] = counts.get(emotion, 0) + 1
-    dominant_emotion = max(matched_emotions, key=lambda e: counts[e])
-    final_mode = 'override' if 'override' in matched_modes else 'blend'
-    return avg_score, dominant_emotion, 'phrase_rule', final_mode
+    Reason:
+        Loading transformer models is expensive.
+        If we load them on every request, the app becomes painfully slow.
+    """
+    global _sentiment_pipeline, _emotion_pipeline
 
+    try:
+        from transformers import pipeline
 
-def check_single_word(text_lower):
-    stripped = text_lower.strip()
-    if stripped in SINGLE_WORD_RULES:
-        score, emotion = SINGLE_WORD_RULES[stripped]
-        return score, emotion, 'single_word_rule'
-    return None, None, None
+        print("[sentiment_analyzer] Loading sentiment model...", file=sys.stderr)
 
-
-def has_contrast(text_lower):
-    for word in CONTRAST_WORDS:
-        pattern = r'\b' + re.escape(word) + r'\b'
-        if re.search(pattern, text_lower):
-            return True
-    return False
-
-
-def detect_emotion(text):
-    text_lower = text.lower()
-    for emotion, keywords in EMOTION_KEYWORDS.items():
-        for keyword in keywords:
-            if keyword in text_lower:
-                return emotion, 'keyword'
-    return 'neutral_emotion', None
-
-
-def classify_label(score):
-    if score > 0.10:
-        return 'positive'
-    elif score < -0.10:
-        return 'negative'
-    return 'neutral'
-
-
-def build_result(label, score, emotion, trigger, reason=None):
-    result = {
-        'label':           label,
-        'score':           round(score, 3),
-        'emotion':         emotion,
-        'emotion_trigger': trigger
-    }
-    if reason:
-        result['reason'] = reason
-    return result
-
-
-# ═══════════════════════════════════════════════════════════════
-# MAIN FUNCTION
-# ═══════════════════════════════════════════════════════════════
-
-def analyze_sentiment(text):
-    if not text or len(text.strip()) < 2:
-        return build_result('neutral', 0.0, 'neutral_emotion', None)
-
-    text_lower = text.lower().strip()
-
-    sw_score, sw_emotion, sw_trigger = check_single_word(text_lower)
-    if sw_score is not None:
-        label = classify_label(sw_score)
-        return build_result(label, sw_score, sw_emotion, sw_trigger)
-
-    phrase_score, phrase_emotion, phrase_trigger, phrase_mode = check_phrase_rules(text_lower)
-
-    vader_scores = _vader.polarity_scores(text)
-    compound_score = vader_scores['compound']
-
-    if phrase_score is not None:
-        if phrase_mode == 'override':
-            final_score = phrase_score
-        elif compound_score != 0.0:
-            final_score = (phrase_score + compound_score) / 2
-        else:
-            final_score = phrase_score
-    else:
-        final_score = compound_score
-
-    if phrase_emotion is not None:
-        final_emotion = phrase_emotion
-        final_trigger = phrase_trigger
-    else:
-        final_emotion, final_trigger = detect_emotion(text)
-
-    if has_contrast(text_lower) and abs(final_score) < 0.3:
-        return build_result(
-            'neutral', final_score, final_emotion, final_trigger,
-            reason='contrast_detected'
+        _sentiment_pipeline = pipeline(
+            "sentiment-analysis",
+            model=_SENTIMENT_MODEL,
+            top_k=None,
         )
 
-    label = classify_label(final_score)
-    return build_result(label, final_score, final_emotion, final_trigger)
+        print("[sentiment_analyzer] Sentiment model loaded.", file=sys.stderr)
+
+    except Exception as exc:
+        print(
+            f"[sentiment_analyzer] WARNING: sentiment model failed to load: {exc}",
+            file=sys.stderr,
+        )
+        _sentiment_pipeline = None
+
+    try:
+        from transformers import pipeline
+
+        print("[sentiment_analyzer] Loading emotion model...", file=sys.stderr)
+
+        _emotion_pipeline = pipeline(
+            "text-classification",
+            model=_EMOTION_MODEL,
+            top_k=None,
+        )
+
+        print("[sentiment_analyzer] Emotion model loaded.", file=sys.stderr)
+
+    except Exception as exc:
+        print(
+            f"[sentiment_analyzer] WARNING: emotion model failed to load: {exc}",
+            file=sys.stderr,
+        )
+        _emotion_pipeline = None
 
 
-# ═══════════════════════════════════════════════════════════════
-# ENTRY POINT
-# ═══════════════════════════════════════════════════════════════
+def normalize_sentiment_label(raw_label: str) -> str:
+    """
+    Convert model-specific labels into app labels.
 
-if __name__ == '__main__':
+    Reason:
+        Different Hugging Face models return different label formats.
+        This function protects your dashboard from showing wrong values.
+
+    Examples:
+        LABEL_0         -> negative
+        LABEL_1         -> negative
+        LABEL_2         -> neutral
+        LABEL_3         -> positive
+        LABEL_4         -> positive
+        Very Positive   -> positive
+        Positive        -> positive
+    """
+    if not raw_label:
+        return _SENTIMENT_FALLBACK
+
+    cleaned = raw_label.strip().lower().replace("_", " ")
+
+    label_map = {
+        # Numeric labels used by some 5-class sentiment models
+        "label 0": "negative",
+        "label 1": "negative",
+        "label 2": "neutral",
+        "label 3": "positive",
+        "label 4": "positive",
+
+        # Text labels used by tabularisai-style sentiment models
+        "very negative": "negative",
+        "negative": "negative",
+        "neutral": "neutral",
+        "positive": "positive",
+        "very positive": "positive",
+
+        # Extra common variants
+        "neg": "negative",
+        "neu": "neutral",
+        "pos": "positive",
+    }
+
+    return label_map.get(cleaned, _SENTIMENT_FALLBACK)
+
+
+def predict_sentiment(text: str) -> tuple[str, float, str]:
+    """
+    Run sentiment prediction.
+
+    Returns:
+        label:
+            positive / negative / neutral
+
+        score:
+            confidence score from the model
+
+        trigger:
+            transformer = model worked
+            fallback    = model failed
+    """
+    if _sentiment_pipeline is None:
+        return _SENTIMENT_FALLBACK, 0.0, "fallback"
+
+    try:
+        results = _sentiment_pipeline(text)
+
+        # Some pipelines return [[{...}, {...}]]
+        # Others return [{...}, {...}]
+        # This makes both formats safe.
+        if results and isinstance(results[0], list):
+            results = results[0]
+
+        best = max(results, key=lambda item: item["score"])
+
+        raw_label = str(best.get("label", ""))
+        score = round(float(best.get("score", 0.0)), 3)
+
+        label = normalize_sentiment_label(raw_label)
+
+        # Helpful debug log.
+        # This goes to stderr, so it should not break JSON output.
+        print(
+            f"[sentiment_analyzer] sentiment raw={raw_label}, normalized={label}, score={score}",
+            file=sys.stderr,
+        )
+
+        return label, score, "transformer"
+
+    except Exception as exc:
+        print(
+            f"[sentiment_analyzer] WARNING: sentiment prediction failed: {exc}",
+            file=sys.stderr,
+        )
+        return _SENTIMENT_FALLBACK, 0.0, "fallback"
+
+
+def normalize_emotion_label(raw_label: str) -> str:
+    """
+    Normalize emotion labels.
+
+    Reason:
+        Keeps output clean and predictable for frontend/dashboard.
+    """
+    if not raw_label:
+        return _EMOTION_FALLBACK
+
+    cleaned = raw_label.strip().lower().replace("_", " ")
+
+    valid_emotions = {
+        "joy",
+        "anger",
+        "sadness",
+        "fear",
+        "surprise",
+        "disgust",
+        "neutral",
+    }
+
+    return cleaned if cleaned in valid_emotions else _EMOTION_FALLBACK
+
+
+def predict_emotion(text: str) -> tuple[str, str]:
+    """
+    Run emotion prediction.
+
+    Returns:
+        emotion:
+            joy / anger / sadness / fear / surprise / disgust / neutral
+
+        trigger:
+            transformer = model worked
+            fallback    = model failed
+    """
+    if _emotion_pipeline is None:
+        return _EMOTION_FALLBACK, "fallback"
+
+    try:
+        results = _emotion_pipeline(text)
+
+        if results and isinstance(results[0], list):
+            results = results[0]
+
+        best = max(results, key=lambda item: item["score"])
+
+        raw_emotion = str(best.get("label", ""))
+        emotion = normalize_emotion_label(raw_emotion)
+
+        print(
+            f"[sentiment_analyzer] emotion raw={raw_emotion}, normalized={emotion}",
+            file=sys.stderr,
+        )
+
+        return emotion, "transformer"
+
+    except Exception as exc:
+        print(
+            f"[sentiment_analyzer] WARNING: emotion prediction failed: {exc}",
+            file=sys.stderr,
+        )
+        return _EMOTION_FALLBACK, "fallback"
+
+
+def analyze_sentiment(text: str) -> dict:
+    """
+    Main function used by the backend.
+
+    Reason:
+        Keeps one clean output shape for the Node/Express side.
+    """
+    if not text or len(text.strip()) < 2:
+        return {
+            "label": "neutral",
+            "score": 0.0,
+            "sentiment_trigger": "fallback",
+            "emotion": "neutral",
+            "emotion_trigger": "fallback",
+        }
+
+    label, score, sentiment_trigger = predict_sentiment(text)
+    emotion, emotion_trigger = predict_emotion(text)
+
+    return {
+        "label": label,
+        "score": score,
+        "sentiment_trigger": sentiment_trigger,
+        "emotion": emotion,
+        "emotion_trigger": emotion_trigger,
+    }
+
+
+if __name__ == "__main__":
+    load_models()
+
     if not sys.stdin.isatty():
         try:
-            text = sys.stdin.read().strip()
-            print(json.dumps(analyze_sentiment(text)))
-        except Exception as e:
-            print(json.dumps({
-                'label': 'neutral',
-                'score': 0.0,
-                'emotion': 'neutral_emotion',
-                'emotion_trigger': None,
-                'error': str(e)
-            }))
+            input_text = sys.stdin.read().strip()
+            result = analyze_sentiment(input_text)
+            print(json.dumps(result))
+        except Exception as exc:
+            print(
+                json.dumps({
+                    "label": "neutral",
+                    "score": 0.0,
+                    "sentiment_trigger": "fallback",
+                    "emotion": _EMOTION_FALLBACK,
+                    "emotion_trigger": "fallback",
+                    "error": str(exc),
+                })
+            )
+
         sys.exit(0)
-
-    TEST_CASES = [
-        ('I like the design but it feels slow',     'neutral'),
-        ('bad',                                     'negative'),
-        ('love it',                                 'positive'),
-        ('slow',                                    'negative'),
-        ('confusing',                               'negative'),
-        ('too slow',                                'negative'),
-        ('takes forever',                           'negative'),
-        ('easy to use',                             'positive'),
-        ('could be better',                         'negative'),
-        ('expected more',                           'negative'),
-        ('The facilities are excellent',            'positive'),
-        ('I hate this completely',                  'negative'),
-        ('okay i guess',                            'neutral'),
-        ('The class runs on Mondays',               'neutral'),
-        ('I am so frustrated the wifi never works', 'negative'),
-        ('I hope they improve the cafeteria',       'neutral'),
-        ('This is absolutely amazing',              'positive'),
-        ('disappointed with the service',           'negative'),
-        ('not sure how to use this feature',        'negative'),
-        ('easy to use but takes forever to load',   'neutral'),
-        ('not bad',                                 'positive'),
-        ('not good',                                'negative'),
-        ('not slow',                                'neutral'),
-        ('not clear',                               'negative'),
-    ]
-
-    passed = 0
-    print(f'\n{"Input":<45} {"Expected":<10} {"Got":<10} {"Score":<8} {"Emotion":<15} {"Status"}')
-    print('─' * 105)
-
-    for text, expected in TEST_CASES:
-        result = analyze_sentiment(text)
-        got = result['label']
-        status = '✅ PASS' if got == expected else '❌ FAIL'
-        if got == expected:
-            passed += 1
-        print(f'{text[:44]:<45} {expected:<10} {got:<10} {result["score"]:<8} {result["emotion"]:<15} {status}')
-
-    print(f'\nResult: {passed}/{len(TEST_CASES)} passed')

@@ -130,17 +130,23 @@ export const adminAPI = {
 
   /* --- Feedback Management --- */
   getAllFeedback: (filters = {}) => {
-  const params = new URLSearchParams();
-  if (filters.category)  params.append('category',  filters.category);
-  if (filters.status)    params.append('status',    filters.status);
-  if (filters.sentiment) params.append('sentiment', filters.sentiment);
-  if (filters.emotion)   params.append('emotion',   filters.emotion); // ✅ add this
-  if (filters.sort)      params.append('sort',      filters.sort);
-  if (filters.limit)     params.append('limit',     filters.limit);
-  if (filters.page)      params.append('page',      filters.page);
-  if (filters.filter)    params.append('filter',    filters.filter);
-  return api.get(`/api/admin/feedback?${params.toString()}`);
-},
+    const params = new URLSearchParams();
+
+    if (filters.category)  params.append('category',  filters.category);
+    if (filters.status)    params.append('status',    filters.status);
+    if (filters.sentiment) params.append('sentiment', filters.sentiment);
+    if (filters.emotion)   params.append('emotion',   filters.emotion);
+    if (filters.search)    params.append('search',    filters.search);
+    if (filters.sort)      params.append('sort',      filters.sort);
+    if (filters.limit)     params.append('limit',     filters.limit);
+    if (filters.page)      params.append('page',      filters.page);
+    if (filters.filter)    params.append('filter',    filters.filter);
+
+    return api.get(`/api/admin/feedback?${params.toString()}`);
+  },
+
+  getFeedbackFilters: () => api.get('/api/admin/filters'),
+
 
   updateFeedbackStatus: (id, data) => api.put(`/api/admin/feedback/${id}`, data),
 

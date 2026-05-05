@@ -2,92 +2,170 @@ const mongoose = require('mongoose');
 
 const feedbackSchema = new mongoose.Schema({
 
-  // Unique anonymous identifier for each submission e.g. FB-A1B2C3D4E
+  // ─────────────────────────────────────────────
+  // UNIQUE IDENTIFIER (Anonymous tracking)
+  // ─────────────────────────────────────────────
+  // Example: FB-A1B2C3D4E
   anonymous_id: {
-    type:    String,
+    type: String,
     default: () => 'FB-' + Math.random().toString(36).substr(2, 9).toUpperCase()
   },
 
-  // Which area the feedback is about
-  category: {
-    type:     String,
-    required: true,
-    enum:     ['academic', 'library', 'it', 'facilities', 'canteen', 'transport', 'hostel', 'admin', 'other']
+  // ─────────────────────────────────────────────
+  // AI TAGGING & GROUPING
+  // ─────────────────────────────────────────────
+
+  // Dynamic tags extracted from feedback (e.g. ["wifi", "canteen"])
+  tags: {
+    type: [String],
+    default: []
   },
 
-  // The actual feedback text from the student
+  // Higher-level grouping label (e.g. "Internet Issues")
+  topicLabel: {
+    type: String,
+    default: null
+  },
+
+
+  // Short display label for dashboard/UI
+// Example: "Canteen Food"
+  topicShortLabel: {
+    type: String,
+    default: null
+  },
+
+  // ─────────────────────────────────────────────
+  // CORE FEEDBACK CONTENT (SOURCE OF TRUTH)
+  // ─────────────────────────────────────────────
+
+  // Main student feedback text
   feedback: {
-    type:      String,
-    required:  true,
+    type: String,
+    required: true,
     maxlength: 1000
   },
 
-  // Evidence file attached by student (stored in Cloudinary)
+  // ─────────────────────────────────────────────
+  // EVIDENCE HANDLING
+  // ─────────────────────────────────────────────
+
+  // Stored file info (image or PDF)
   evidenceFile: {
     url:      { type: String, default: null },
     fileName: { type: String, default: null },
     fileType: { type: String, default: null }
   },
 
-  // Text extracted from the evidence file via OCR (PDF or image)
+  // Extracted text from evidence (OCR or PDF parsing)
+  // This is what will be used in RAG, NOT the raw file
   evidenceText: {
-    type:    String,
+    type: String,
     default: null
   },
 
-  // Sentiment detected by Python script
+  // ─────────────────────────────────────────────
+  // SENTIMENT & EMOTION ANALYSIS
+  // ─────────────────────────────────────────────
+
   sentiment: {
-    type:    String,
-    enum:    ['positive', 'neutral', 'negative'],
+    type: String,
+    enum: ['positive', 'neutral', 'negative'],
     default: null
   },
+
   sentimentScore: {
-    type:    Number,
+    type: Number,
     default: null
   },
 
-  // Emotion detected by Python script — more specific than sentiment
-  // e.g. a negative submission could be "angry" vs "disappointed"
   emotion: {
-    type:    String,
-    enum:    ['excited', 'satisfied', 'hopeful', 'angry', 'disappointed', 'confused', 'neutral_emotion'],
+    type: String,
+    enum: ['joy', 'anger', 'sadness', 'fear', 'disgust', 'surprise', 'neutral'],
     default: null
   },
 
-  // What triggered the emotion detection
-  // e.g. "phrase_rule", "single_word_rule", or an NRC category like "anger"
+  // How emotion was detected
   emotionTrigger: {
-    type:    String,
+    type: String,
+    enum: ['transformer', 'phrase_rule', 'single_word_rule', 'fallback'],
     default: null
   },
 
-  // AI generated summary — created on demand by admin
+  // ─────────────────────────────────────────────
+  // AI OUTPUT (Generated later by admin)
+  // ─────────────────────────────────────────────
+
+  // AI-generated summary of feedback
   summary: {
-    type:    String,
+    type: String,
     default: null
   },
 
-  // Embedding vector for MongoDB vector search (384 dimensions)
-  embedding: {
-    type:    [Number],
-    default: []
+
+
+  processingStatus: {
+  type: String,
+  enum: ['pending', 'processing', 'completed', 'failed'],
+  default: 'pending'
+},
+
+processingError: {
+  type: String,
+  default: null
+},
+
+processedAt: {
+  type: Date,
+  default: null
+},
+
+  // ─────────────────────────────────────────────
+  // RAG PIPELINE STATUS TRACKING
+  // ─────────────────────────────────────────────
+
+  // Tracks indexing progress for FAISS / vector store
+  ragStatus: {
+    type: String,
+    enum: ['pending', 'processing', 'indexed', 'failed'],
+    default: 'pending'
   },
+
+  // Stores error message if indexing fails
+  ragError: {
+    type: String,
+    default: null
+  },
+
+  // When indexing was completed
+  indexedAt: {
+    type: Date,
+    default: null
+  },
+
+  // ─────────────────────────────────────────────
+  // TIMESTAMPS
+  // ─────────────────────────────────────────────
 
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now }
 
 }, {
-  toJSON:   { virtuals: true },
+  toJSON: { virtuals: true },
   toObject: { virtuals: true }
 });
 
-// Update updatedAt timestamp before every save
+// ─────────────────────────────────────────────
+// AUTO-UPDATE TIMESTAMP
+// ─────────────────────────────────────────────
 feedbackSchema.pre('save', function(next) {
   this.updatedAt = Date.now();
   next();
 });
 
-// Virtual — human readable time e.g. "2 hours ago"
+// ─────────────────────────────────────────────
+// HUMAN-READABLE DATE (for UI)
+// ─────────────────────────────────────────────
 feedbackSchema.virtual('date').get(function() {
   const now     = new Date();
   const diff    = now - this.createdAt;
@@ -96,8 +174,8 @@ feedbackSchema.virtual('date').get(function() {
   const days    = Math.floor(diff / 86400000);
 
   if (minutes < 60) return `${minutes} min ago`;
-  if (hours   < 24) return `${hours} hours ago`;
-  if (days    <  7) return `${days} days ago`;
+  if (hours < 24)   return `${hours} hours ago`;
+  if (days < 7)     return `${days} days ago`;
   return this.createdAt.toLocaleDateString();
 });
 

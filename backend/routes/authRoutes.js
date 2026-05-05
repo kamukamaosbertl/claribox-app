@@ -5,7 +5,7 @@ const express = require('express');
 const router  = express.Router();
 const jwt     = require('jsonwebtoken');
 const axios   = require('axios');
-const { sendSecurityAlert } = require('../services/emailService');
+//const { sendSecurityAlert } = require('../services/emailService');
 const Admin   = require('../models/Admin');
 
 // Generates a JWT token for authenticated users
@@ -171,7 +171,7 @@ router.post('/change-password', async (req, res) => {
     await admin.save();
 
     // Send security alert email
-    await sendSecurityAlert(admin.name, 'password');
+    //await sendSecurityAlert(admin.name, 'password');
 
     res.json({ success: true, message: 'Password changed successfully.' });
   } catch (error) {

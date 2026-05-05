@@ -19,16 +19,11 @@ const resolutionSchema = new mongoose.Schema({
   },
 
   // Category matches feedback categories so trending issues can be linked
-  category: {
-    type:    String,
-    enum:    [
-      'General', 'Infrastructure', 'Academics', 'Services',
-      'Facilities', 'Technology', 'Other',
-      // Feedback categories — matched to resolution for trending impact
-      'Academic', 'Library', 'IT', 'Canteen', 'Transport', 'Hostel', 'Admin'
-    ],
-    default: 'General'
-  },
+category: {
+  type: String,
+  default: 'General',
+  trim: true
+},
 
   // Status of the resolution — tracks progress
   status: {
