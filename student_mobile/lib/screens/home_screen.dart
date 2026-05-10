@@ -447,22 +447,6 @@ class _HomeScreenState extends State<HomeScreen>
           ),
         ),
         const SizedBox(height: 14),
-        // Secondary CTA
-        OutlinedButton.icon(
-          onPressed: () {},
-          style: OutlinedButton.styleFrom(
-            minimumSize: const Size(double.infinity, 52),
-            side: const BorderSide(color: _C.glassBorder),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(18),
-            ),
-          ),
-          icon: const Icon(LucideIcons.eye, size: 16, color: _C.textMid),
-          label: Text(
-            'Browse the Board',
-            style: _T.label.copyWith(fontSize: 15, color: _C.textMid),
-          ),
-        ),
       ],
     );
   }

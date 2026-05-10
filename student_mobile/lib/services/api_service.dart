@@ -6,48 +6,53 @@ class ApiService {
   Future<String?> getBaseUrl() async {
     final prefs = await SharedPreferences.getInstance();
     final ip = prefs.getString('backend_ip');
-    if (ip == null || ip.trim().isEmpty) return null;
-    return "http://${ip.trim()}:5000";
+
+    if (ip == null || ip.trim().isEmpty) {
+      return null;
+    }
+
+    return 'http://${ip.trim()}:5000';
   }
 
   Future<bool> submitFeedback({
-    required String category,
     required String feedback,
     File? evidenceFile,
   }) async {
     try {
       final baseUrl = await getBaseUrl();
+
       if (baseUrl == null) {
-        print("No backend IP set");
+        print('No backend IP set');
         return false;
       }
 
-      final uri = Uri.parse("$baseUrl/api/feedback/submit");
+      final uri = Uri.parse('$baseUrl/api/feedback/submit');
 
-      final request =
-          http.MultipartRequest('POST', uri)
-            ..fields['category'] = category
-            ..fields['feedback'] = feedback;
+      final request = http.MultipartRequest('POST', uri)
+        ..fields['feedback'] = feedback.trim();
 
       if (evidenceFile != null) {
         request.files.add(
-          await http.MultipartFile.fromPath('evidenceFile', evidenceFile.path),
+          await http.MultipartFile.fromPath(
+            'evidenceFile',
+            evidenceFile.path,
+          ),
         );
       }
 
-      final response = await request.send().timeout(
-        const Duration(seconds: 15),
-      );
+      final streamedResponse = await request.send().timeout(
+            const Duration(seconds: 15),
+          );
 
-      // Read response body (VERY useful for debugging)
-      final responseBody = await response.stream.bytesToString();
+      final responseBody = await streamedResponse.stream.bytesToString();
 
-      print("STATUS: ${response.statusCode}");
-      print("BODY: $responseBody");
+      print('STATUS: ${streamedResponse.statusCode}');
+      print('BODY: $responseBody');
 
-      return response.statusCode == 200 || response.statusCode == 201;
+      return streamedResponse.statusCode == 200 ||
+          streamedResponse.statusCode == 201;
     } catch (e) {
-      print("ERROR: $e");
+      print('ERROR: $e');
       return false;
     }
   }

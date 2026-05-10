@@ -289,21 +289,28 @@ def analyze_sentiment(text: str) -> dict:
 if __name__ == "__main__":
     load_models()
 
-    if not sys.stdin.isatty():
-        try:
-            input_text = sys.stdin.read().strip()
-            result = analyze_sentiment(input_text)
-            print(json.dumps(result))
-        except Exception as exc:
-            print(
-                json.dumps({
-                    "label": "neutral",
-                    "score": 0.0,
-                    "sentiment_trigger": "fallback",
-                    "emotion": _EMOTION_FALLBACK,
-                    "emotion_trigger": "fallback",
-                    "error": str(exc),
-                })
-            )
+    try:
+        # 1. Prefer command-line argument:
+        # python sentiment_analyzer.py "feedback text here"
+        if len(sys.argv) > 1:
+            input_text = " ".join(sys.argv[1:]).strip()
 
-        sys.exit(0)
+        # 2. Otherwise read from stdin:
+        # echo "feedback text here" | python sentiment_analyzer.py
+        else:
+            input_text = sys.stdin.read().strip()
+
+        result = analyze_sentiment(input_text)
+        print(json.dumps(result))
+
+    except Exception as exc:
+        print(
+            json.dumps({
+                "label": "neutral",
+                "score": 0.0,
+                "sentiment_trigger": "fallback",
+                "emotion": _EMOTION_FALLBACK,
+                "emotion_trigger": "fallback",
+                "error": str(exc),
+            })
+        )

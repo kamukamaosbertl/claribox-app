@@ -30,7 +30,7 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  file_picker: 8.1.2
+  file_picker: ^8.1.7
   http: 1.2.2
   shared_preferences: 2.3.5
 
@@ -38,10 +38,18 @@ dependencies:
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
   lucide_icons: ^0.257.0
+  
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
+  flutter_launcher_icons: ^0.14.4  
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/f5.png"
+  min_sdk_android: 21  
 
   # The "flutter_lints" package below contains a set of recommended lints to
   # encourage good coding practices. The lint set provided by the package is

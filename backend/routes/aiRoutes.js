@@ -110,10 +110,24 @@ OPENING RULE
 CONVERSATION MEMORY
 ════════════════════════════
 - Treat short follow-ups as continuing the previous topic.
-- If the admin says "them", "this", "that", "it", "those", or "they", resolve it using the previous assistant answer.
+- If the admin says "them", "this", "that", "it", "those", "they", or asks a short question, resolve it using the previous answer.
 - Do NOT switch topics during a follow-up unless the admin clearly names a new topic.
-- If the follow-up is unclear, ask one short clarification question instead of starting new analysis.
-- Do NOT restate the previous answer. Continue from it.
+- Do NOT restate the previous answer. Continue from it and go deeper.
+- Do NOT add unrelated topics (e.g. cafeteria, WiFi) when the conversation is about one specific topic.
+- If the admin asks "only?" or "is that all?" — expand on the current topic with more depth, do not repeat.
+- If the follow-up is about emotions or sentiment ("are they frustrated?", "how do they feel?") — describe the emotional tone in more detail using the data.
+- If unclear, ask one short clarification question instead of starting new analysis.
+
+Examples:
+Admin: "What are students saying about lecturers?"
+Assistant: explains engagement, clarity, enthusiasm.
+Admin: "are they being frustrated, only?"
+Assistant: goes deeper — describes anger, disappointment, specific complaints. Does NOT mention cafeteria.
+
+Admin: "Tell me about WiFi."
+Assistant: explains WiFi complaints.
+Admin: "How can we fix it?"
+Assistant: gives WiFi actions only. Does NOT add other topics.
 
 Examples:
 Admin: "What problems are students facing?"
@@ -135,7 +149,16 @@ RESPONSE STYLE
 - Group related ideas into themes.
 - Avoid robotic or repetitive phrasing.
 - Do NOT label responses as categories (e.g. "Lecturer Performance", "Cafeteria Services")
+- Never repeat the same opening phrase across responses in the same conversation.
+- Each response should feel fresh and approach the topic from a new angle.
 - Write naturally instead of naming categories explicitly
+- Always start a response with one short intro sentence before any bullets or headers.
+- Always end with one short sentence telling the admin what they could ask next.
+  Examples:
+  "You can ask me to suggest solutions for any of these issues."
+  "Ask me to go deeper on any of these areas."
+  "You can ask me to prioritize these or explore a specific concern."
+- Never end a response abruptly after the last bullet or action.
 
 ════════════════════════════
 INSIGHT QUALITY
@@ -195,6 +218,33 @@ Examples of invalid input:
 In these cases, respond like:
 - If rejecting, do it only when the message has no clear meaning.
 - Do NOT reject valid questions with minor typos.
+
+════════════════════════════
+FORMATTING RULES
+════════════════════════════
+Detect the right format from the question type:
+
+USE BULLET POINTS ("- ") when:
+- Admin asks to "list", "show", "give me", "what are the problems", "what issues"
+- The answer has 3 or more distinct separate items
+
+USE NUMBERED STEPS when:
+- Admin asks for solutions, actions, fixes, recommendations
+- Always number solutions — never write them as prose
+
+USE BOLD HEADERS when:
+- Admin asks for a summary, overview, briefing, or digest
+- The answer covers multiple distinct themes
+
+USE SHORT PROSE when:
+- Admin asks "why", "how", "what are students saying", "explain"
+- The answer is one connected idea
+
+NEVER:
+- Mix bullet styles ("*" and "-" in the same response)
+- Write solutions as paragraphs
+- Use "•" symbol
+- Write more than 4 bullet points unless explicitly asked for more
 
 ════════════════════════════
 TONE
@@ -270,6 +320,8 @@ function cleanAIResponse(text) {
         /^Looking at the conversation history[^.]*\.\s*/i,
         /^Based on the conversation history[^.]*\.\s*/i,
         /^Based on the (feedback|data|information|context|results)[^.]*\.\s*/i,
+        /^Based on the top feedback categories[^.]*\.\s*/i,
+        /^Based on the top feedback categories[^:]*:\s*/i,
         /^From the (feedback|data|information|context|results)[^.]*\.\s*/i,
         /^Looking at the (feedback|data|information|context|results)[^.]*\.\s*/i,
         /^Reviewing the (feedback|data|information|context|results)[^.]*\.\s*/i,
@@ -365,11 +417,27 @@ function cleanAIResponse(text) {
         .replace(/\bPlease (let me know|feel free)[^.]*\.\s*$/gi, '')
         .trim();
 
-    // 10. Final whitespace cleanup
-    cleaned = cleaned.replace(/\s{2,}/g, ' ').trim();
+    // 10. Final whitespace cleanup — preserve newlines for markdown
+    cleaned = cleaned.replace(/[ \t]{2,}/g, ' ').trim();
 
     return cleaned || text;
 }
+
+//markdown cleaner for AI responses, removes markdown artifacts and empty sections  
+function postProcessMarkdown(text) {
+    if (!text) return text;
+    return text
+        // Ensure ** bold headers are on their own line
+        .replace(/([^\n])\*\*([^*]+)\*\*/g, '$1\n\n**$2**')
+        // Ensure each - bullet is on its own line
+        .replace(/([^\n])-\s+(?=[A-Z])/g, '$1\n- ')
+        // Ensure each numbered step is on its own line  
+        .replace(/([^\n])(\d+\.)\s+/g, '$1\n$2 ')
+        // Remove excessive blank lines (max 2)
+        .replace(/\n{3,}/g, '\n\n')
+        .trim();
+}
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 // enforceFollowUp
@@ -440,7 +508,17 @@ ${truncatedAnswer}
 Current follow-up:
 ${message}
 
-Use the previous topic to resolve this follow-up. Do NOT switch topics. Do NOT restate the previous answer — just continue from it.
+STRICT RULES:
+- This is a follow-up to the previous topic ONLY.
+- The topic is: "${lastContext.lastQuestion || 'the previous question'}".
+- Do NOT introduce ANY new topics not present in the previous question.
+- Do NOT mention hostels if the previous question was about registration.
+- Do NOT mention finance if the previous question was about hostels.
+- Stay locked on the exact topic of the previous question.
+- Do NOT restart the analysis. Continue from where the previous answer left off.
+- If the admin is asking about emotions or feelings, go deeper into those only.
+- Resolve pronouns like "they", "them", "it" using the previous topic only.
+- If the follow-up is too vague to answer on topic, ask one short clarification question.
 `.trim();
 }
 
@@ -455,9 +533,8 @@ Use the previous topic to resolve this follow-up. Do NOT switch topics. Do NOT r
 // ─────────────────────────────────────────────────────────────────────────────
 function detectChitChat(message) {
     const lower = message.toLowerCase().trim();
-
+    if (/(^bye$|^goodbye$|see you|see ya|later|talk to you later|catch you later|bye bye|good night|goodnight)/i.test(lower)) return 'farewell';
     if (/^(hi|hello|hey|good morning|good afternoon|good evening|good night|good day)[!. ]*$/.test(lower)) return 'greeting';
-    if (/(^bye$|^goodbye$|see you|see ya|later|talk to you later|catch you later|bye bye)/.test(lower)) return 'farewell';
     if (/(thanks|thank you|thx|appreciate|great work|well done)/.test(lower)) return 'gratitude';
     if (/(how are you|how r u|you okay|you good)/.test(lower)) return 'status';
     if (/(who are you|what are you|what can you do|your name|introduce yourself)/.test(lower)) return 'identity';
@@ -766,6 +843,8 @@ function buildChunkContext(chunks) {
 // ─────────────────────────────────────────────────────────────────────────────
 function softFilterChunkResults(chunks, queryHints, detectedCategory = null) {
     if (!queryHints || !queryHints.length) return chunks;
+    
+    // Strict filter — chunk must match at least 2 hints if we have enough hints
     const filtered = chunks.filter(chunk => {
         const haystack = [
             chunk.chunkText || '',
@@ -775,11 +854,16 @@ function softFilterChunkResults(chunks, queryHints, detectedCategory = null) {
             detectedCategory?.label || '',
             detectedCategory?.shortLabel || ''
         ].join(' ').toLowerCase();
-        return queryHints.some(hint => haystack.includes(hint));
+        
+        const matchCount = queryHints.filter(hint => haystack.includes(hint)).length;
+        
+        // If we have 3+ hints, require at least 2 matches
+        // If we have fewer hints, require at least 1
+        return queryHints.length >= 3 ? matchCount >= 2 : matchCount >= 1;
     });
+    
     return filtered.length > 0 ? filtered : chunks;
 }
-
 
 /* ═══════════════════════════════════════════════════════════════════════════
    SECTION 6 — RETRIEVAL MODES
@@ -942,6 +1026,44 @@ function buildAnalysisPrompt(message, context, dateLabel, queryHints, intent, re
     const scope    = [topicStr, dateLabel ? `Period: ${dateLabel}` : null]
         .filter(Boolean)
         .join(' | ');
+        const lower = message.toLowerCase();
+    let formatInstruction = '';
+
+    if (/(list|all problems|all issues|show me|give me|what are the problems|what problems|what issues|facing|students face|problems are|issues are|what concerns|what complaints|most common|most urgent|priorit)/i.test(lower)) {
+        formatInstruction = `Format: Use ONLY "- " (dash space) for every bullet. Never use "*" or "•". Each bullet on its own line. Example:
+    - First issue
+    - Second issue
+    - Third issue`;
+    } else if (/(solution|fix|action|improve|recommend|what can|how can|what should|way forward|next step|practical)/i.test(lower)) {
+        formatInstruction = `Format: Use numbered steps. Start each with an action verb. Example:
+    1. Train finance staff on communication
+    2. Implement digital clearance system
+    3. Schedule regular maintenance`;
+    } else if (/(why|what are students saying|tell me about|explain|what do students|how do students feel)/i.test(lower)) {
+        formatInstruction = `Format: Use short prose paragraphs. Max 2-3 sentences per theme. No bullet points.`;
+    } else if (/(summary|summarize|summarise|overview|digest|briefing|management summary)/i.test(lower)) {
+    formatInstruction = `CRITICAL FORMAT RULES:
+- Output ONLY clean markdown. No inline asterisks mid-sentence.
+- Every bold header must open AND close: **Header Name**
+- Never use single asterisk * for anything
+- Use this EXACT structure with blank lines between sections:
+
+One intro sentence here.
+
+**Header One**
+One or two sentences here.
+
+**Header Two**
+One or two sentences here.
+
+**Header Three**
+One or two sentences here.
+
+One closing sentence here.`;
+    } else {
+        formatInstruction = `Format: Use the most natural format for this question. Bullets for lists, prose for explanations.`;
+    }
+    
 
     return `
 Admin question:
@@ -962,6 +1084,23 @@ Guidance:
 - Avoid generic or obvious recommendations
 - Keep solutions clear and distinct
 - Phrase insights as conclusions, not observations
+- If the question names a specific topic (finance, hostel, WiFi, registration), answer ONLY that topic.
+- Do NOT mention any other topic even if related data exists.
+- If the admin asks about finance, talk about finance only — not hostels, not WiFi.
+- If the admin asks about hostels, talk about hostels only — not finance, not registration.
+- Treat the named topic as the ONLY topic for this response.
+- If the question asks to list ALL problems, include only what is present in the data.
+- Do NOT pad the answer with unrelated categories or minor mentions.
+- - Start with ONE short intro sentence summarizing the overall picture.
+- Then use the chosen format (bullets, numbered steps, or headers).
+- Do NOT repeat the question back.
+- Each bullet must describe a student problem only. No recommendations in bullet lists.
+- End with ONE short sentence suggesting what the admin could ask next.
+  Example: "You can ask me to prioritize these issues or suggest solutions for any of them."
+- Do NOT include recommendations or solutions in the list.
+- If the question asks for problems, every bullet must be a problem, not an action or suggestion.
+${formatInstruction}
+
 `.trim();
 }
 // ─────────────────────────────────────────────────────────────────────────────
@@ -973,6 +1112,14 @@ function buildSolutionPrompt(message, context, dateLabel, queryHints, priorQuest
     const scope    = [topicStr, dateLabel ? `Period: ${dateLabel}` : null]
         .filter(Boolean)
         .join(' | ');
+        const lower = message.toLowerCase();
+    let formatInstruction = '';
+
+    if (/(list|all|every|each)/i.test(lower)) {
+        formatInstruction = `Format: Use numbered steps. One action per line. Keep each action short and direct.`;
+    } else {
+        formatInstruction = `Format: Use numbered steps for distinct actions. If only one issue, a short paragraph is fine.`;
+    }    
 
     return `
 Admin request:
@@ -993,6 +1140,20 @@ Guidance:
 - Focus on the most important problems
 - Suggest clear, actionable steps
 - Keep responses concise and useful
+- Do NOT restate or summarize the problems. The admin already knows them.
+- Do NOT start with "Students are facing..." or "The main issues are..."
+- Start immediately with the first action.
+- If the admin named a specific topic, give solutions for THAT TOPIC ONLY.
+- Do NOT add solutions for other topics that were not asked about.
+- Start with the FIRST ACTION immediately. 
+- Do NOT introduce what the problems are.
+- The admin already read the analysis — just give actions.
+- Maximum 7 actions total. Stop after 7. Do not list every possible solution.
+- End with ONE short sentence suggesting what the admin could explore next.
+  Example: "You can ask me to go deeper on any of these actions."
+- Combine similar actions into one point instead of listing them separately.
+- Prioritize the most impactful actions first.
+${formatInstruction}
 `.trim();
 }
 
@@ -1207,11 +1368,31 @@ Do not mention pending, unresolved, or approval status unless explicitly provide
     }
 
     // ── 5. Short follow-up with no prior context ──────────────────────────────
-    const isVeryShort = message.trim().split(/\s+/).length <= 3;
-    if (isVeryShort && isShortFollowUp(message) && !lastContext?.lastQuestion) {
-        const answer = "Can you specify which issue or feedback area you're referring to?";
-        if (session) { session.addMessage(message, answer); await session.save(); }
-        return { answer, meta: { needsContext: true } };
+// ── 5. Short follow-up with no prior context
+const isVeryShort = message.trim().split(/\s+/).length <= 3;
+if (isVeryShort && isShortFollowUp(message) && !lastContext?.lastQuestion) {
+    const answer = "Can you specify which issue or feedback area you're referring to?";
+    if (session) { session.addMessage(message, answer); await session.save(); }
+    return { answer, meta: { needsContext: true } };
+}
+
+// ── 5b. Vague follow-up with ambiguous pronoun and prior context
+    const isVagueFollowUp = followUpMode &&
+        /\b(these|those|them|this|it|the issues|the problems|fix these|solve these|address these)\b/i.test(message) &&
+        message.trim().split(/\s+/).length <= 8;
+
+    if (isVagueFollowUp && lastContext?.lastQuestion) {
+        const hintsFromPrev = extractQueryHints(lastContext.lastQuestion);
+        if (hintsFromPrev.length === 0) {
+            const clarifyPrompt = `The admin asked a vague follow-up: "${message}". 
+    The previous topic was: "${lastContext.lastQuestion}".
+    Ask one short clarification question to understand what they mean.
+    Do not answer the question. Just ask for clarification in one sentence.`;
+            
+            const answer = await generateAIResponse(clarifyPrompt, []);
+            if (session) { session.addMessage(message, answer); await session.save(); }
+            return { answer, meta: { needsContext: true } };
+        }
     }
 
     // Prepend prior context for short follow-ups
@@ -1324,8 +1505,7 @@ STRICT RULES:
         const emotionSummary = Object.entries(
             feedbackDocs.reduce((a, d) => { const e = (d.emotion || 'neutral').toLowerCase(); a[e] = (a[e] || 0) + 1; return a; }, {})
         ).map(([e, c]) => `${c} ${e}`).join(', ');
-
-        const solutionPrompt = buildSolutionPrompt(message, context, null, [], sentimentSummary, emotionSummary, feedbackDocs.length, null);
+        const solutionPrompt = buildSolutionPrompt(message, context, null, [], lastContext?.lastQuestion || null);
 
         let answer;
         if (streamMode && sendChunk) { answer = await streamAIResponse(solutionPrompt, history, sendChunk); }
@@ -1392,7 +1572,14 @@ STRICT RULES:
     const bestCategory     = categoryResults[0] || null;
     const detectedCategory = bestCategory?.score >= 0.62 ? bestCategory.metadata : null;
 
-    const { chunks, topicMismatch, emptyPeriod } = await runSemanticSearch(questionEmbedding, queryHints, dateRange, detectedCategory);
+    // On follow-ups, use the previous question's hints to stay on topic
+    const strictHints = followUpMode && lastContext?.lastQuestion
+        ? extractQueryHints(lastContext.lastQuestion)
+        : queryHints;
+
+    const { chunks, topicMismatch, emptyPeriod } = await runSemanticSearch(
+        questionEmbedding, strictHints, dateRange, detectedCategory
+    );
 
     // No FAISS match above threshold
     if (topicMismatch) {
@@ -1439,7 +1626,7 @@ STRICT RULES:
 
     if (intent === 'solution') {
         const priorQuestion  = followUpMode && lastContext?.lastQuestion ? lastContext.lastQuestion : null;
-        const solutionPrompt = buildSolutionPrompt(message, context, dateRange?.label, queryHints, sentimentSummary, emotionSummary, chunks.length, priorQuestion);
+        const solutionPrompt = buildSolutionPrompt(message, context, dateRange?.label, queryHints, priorQuestion);
 
         if (streamMode && sendChunk) { answer = await streamAIResponse(solutionPrompt, history, sendChunk); }
         else                         { answer = await generateAIResponse(solutionPrompt, history); }
@@ -1472,6 +1659,7 @@ STRICT RULES:
 
     // Final safety check
     answer = cleanAIResponse(answer);
+    answer = postProcessMarkdown(answer);
     if (!answer || answer.trim().length === 0) {
         answer = "I couldn't generate a clear response for that. Try rephrasing your question slightly.";
     } else {

@@ -8,7 +8,7 @@ import '../services/api_service.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 
 // ─────────────────────────────────────────────
-//  Design Tokens (mirrors HomeScreen)
+//  Design Tokens
 // ─────────────────────────────────────────────
 class _C {
   static const bg = Color(0xFF0A1628);
@@ -17,7 +17,6 @@ class _C {
   static const accent = Color(0xFF38BDF8);
   static const success = Color(0xFF34D399);
   static const error = Color(0xFFF87171);
-  static const gold = Color(0xFFFBBF24);
   static const textHi = Colors.white;
   static const textMid = Color(0xFFAEC3E8);
   static const textLo = Color(0xFF4A6FA5);
@@ -34,12 +33,14 @@ class _T {
     letterSpacing: -0.5,
     height: 1.1,
   );
+
   static const body = TextStyle(
     fontFamily: 'Georgia',
     color: _C.textMid,
     fontWeight: FontWeight.w400,
     height: 1.5,
   );
+
   static const mono = TextStyle(
     fontFamily: 'Courier',
     color: _C.accent,
@@ -47,6 +48,7 @@ class _T {
     letterSpacing: 3,
     fontSize: 12,
   );
+
   static const label = TextStyle(
     fontFamily: 'Georgia',
     color: _C.textMid,
@@ -67,13 +69,11 @@ class SubmitFeedbackScreen extends StatefulWidget {
 
 class _SubmitFeedbackScreenState extends State<SubmitFeedbackScreen>
     with SingleTickerProviderStateMixin {
-  // ── Unchanged logic ───────────────────────
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
   final TextEditingController _feedbackController = TextEditingController();
   final TextEditingController _ipController = TextEditingController();
   final ApiService _apiService = ApiService();
 
-  String? _selectedCategory;
   File? _selectedFile;
   bool _isLoading = false;
   bool _isSuccess = false;
@@ -81,25 +81,14 @@ class _SubmitFeedbackScreenState extends State<SubmitFeedbackScreen>
 
   static const int _maxFileSizeBytes = 5 * 1024 * 1024;
 
-  final List<Map<String, String>> _categories = const [
-    {'value': 'academic', 'label': 'Academic & Teaching'},
-    {'value': 'library', 'label': 'Library Services'},
-    {'value': 'it', 'label': 'IT & WiFi'},
-    {'value': 'facilities', 'label': 'Campus Facilities'},
-    {'value': 'canteen', 'label': 'Food & Canteen'},
-    {'value': 'transport', 'label': 'Transport & Parking'},
-    {'value': 'hostel', 'label': 'Hostel & Accommodation'},
-    {'value': 'admin', 'label': 'Administrative Services'},
-    {'value': 'other', 'label': 'Other'},
-  ];
-
-  // ── Orb animation ─────────────────────────
   late AnimationController _orb;
 
   @override
   void initState() {
     super.initState();
+
     _feedbackController.addListener(_updateWordCount);
+
     _orb = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 10),
@@ -108,6 +97,7 @@ class _SubmitFeedbackScreenState extends State<SubmitFeedbackScreen>
 
   void _updateWordCount() {
     final text = _feedbackController.text.trim();
+
     setState(() {
       _wordCount = text.isEmpty ? 0 : text.split(RegExp(r'\s+')).length;
     });
@@ -121,11 +111,12 @@ class _SubmitFeedbackScreenState extends State<SubmitFeedbackScreen>
     super.dispose();
   }
 
-  // ── Unchanged logic methods ───────────────
   Future<void> _showIpSettings() async {
     final prefs = await SharedPreferences.getInstance();
     _ipController.text = prefs.getString('backend_ip') ?? '';
+
     if (!mounted) return;
+
     await showDialog<void>(
       context: context,
       builder: (dialogContext) => _buildSettingsDialog(dialogContext, prefs),
@@ -138,50 +129,71 @@ class _SubmitFeedbackScreenState extends State<SubmitFeedbackScreen>
         type: FileType.custom,
         allowedExtensions: ['jpg', 'jpeg', 'png', 'pdf'],
       );
+
       if (result == null) return;
+
       final picked = result.files.single;
+
+      if (picked.path == null) {
+        _showSnackBar('Could not read selected file.');
+        return;
+      }
+
       if (picked.size > _maxFileSizeBytes) {
         _showSnackBar('File is too large. Maximum size is 5MB.');
         return;
       }
+
       setState(() => _selectedFile = File(picked.path!));
-    } catch (e) {
+    } catch (_) {
       _showSnackBar('Error picking file.');
     }
   }
 
   Future<void> _handleSubmit() async {
     if (!_formKey.currentState!.validate()) return;
+
     if (_wordCount > 1000) {
       _showSnackBar('Please reduce your feedback to under 1000 words.');
       return;
     }
+
     FocusScope.of(context).unfocus();
+
     setState(() => _isLoading = true);
+
     try {
       final success = await _apiService.submitFeedback(
-        category: _selectedCategory!,
         feedback: _feedbackController.text.trim(),
         evidenceFile: _selectedFile,
       );
+
       if (!mounted) return;
+
       setState(() {
         _isLoading = false;
         _isSuccess = success;
       });
-      if (!success) _showSnackBar('Submission failed. Check your server.');
-    } catch (e) {
+
+      if (!success) {
+        _showSnackBar('Submission failed. Check your server.');
+      }
+    } catch (_) {
+      if (!mounted) return;
+
       setState(() => _isLoading = false);
       _showSnackBar('Connection error. Is the server running?');
     }
   }
 
-  void _resetForm() => setState(() {
-    _isSuccess = false;
-    _selectedCategory = null;
-    _selectedFile = null;
-    _feedbackController.clear();
-  });
+  void _resetForm() {
+    setState(() {
+      _isSuccess = false;
+      _selectedFile = null;
+      _feedbackController.clear();
+      _wordCount = 0;
+    });
+  }
 
   void _showSnackBar(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
@@ -195,9 +207,6 @@ class _SubmitFeedbackScreenState extends State<SubmitFeedbackScreen>
     );
   }
 
-  // ─────────────────────────────────────────
-  //  BUILD
-  // ─────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
     if (_isSuccess) return _buildSuccessUI();
@@ -219,20 +228,20 @@ class _SubmitFeedbackScreenState extends State<SubmitFeedbackScreen>
                   children: [
                     _buildHeader(),
                     const SizedBox(height: 32),
-                    _buildSectionLabel('CATEGORY', LucideIcons.tag),
-                    const SizedBox(height: 10),
-                    _buildCategoryGrid(),
-                    const SizedBox(height: 28),
+
                     _buildSectionLabel(
                       'YOUR FEEDBACK',
                       LucideIcons.messageSquare,
                     ),
                     const SizedBox(height: 10),
                     _buildFeedbackField(),
+
                     const SizedBox(height: 28),
+
                     _buildSectionLabel('EVIDENCE', LucideIcons.paperclip),
                     const SizedBox(height: 10),
                     _buildFileSection(),
+
                     const SizedBox(height: 40),
                     _buildSubmitButton(),
                     const SizedBox(height: 16),
@@ -248,7 +257,6 @@ class _SubmitFeedbackScreenState extends State<SubmitFeedbackScreen>
     );
   }
 
-  // ── AppBar ───────────────────────────────────
   PreferredSizeWidget _buildAppBar() {
     return AppBar(
       elevation: 0,
@@ -266,23 +274,27 @@ class _SubmitFeedbackScreenState extends State<SubmitFeedbackScreen>
     );
   }
 
-  // ── Ambient orbs ─────────────────────────────
   Widget _buildAmbientBackground() {
     return AnimatedBuilder(
       animation: _orb,
-      builder:
-          (_, __) => SizedBox.expand(
-            child: CustomPaint(painter: _OrbPainter(_orb.value * 2 * math.pi)),
+      builder: (_, __) {
+        return SizedBox.expand(
+          child: CustomPaint(
+            painter: _OrbPainter(_orb.value * 2 * math.pi),
           ),
+        );
+      },
     );
   }
 
-  // ── Header ───────────────────────────────────
   Widget _buildHeader() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text("What's on\nyour mind?", style: _T.heading.copyWith(fontSize: 36)),
+        Text(
+          "What's on\nyour mind?",
+          style: _T.heading.copyWith(fontSize: 36),
+        ),
         const SizedBox(height: 10),
         Row(
           children: [
@@ -305,7 +317,6 @@ class _SubmitFeedbackScreenState extends State<SubmitFeedbackScreen>
     );
   }
 
-  // ── Section label ────────────────────────────
   Widget _buildSectionLabel(String text, IconData icon) {
     return Row(
       children: [
@@ -323,150 +334,102 @@ class _SubmitFeedbackScreenState extends State<SubmitFeedbackScreen>
     );
   }
 
-  // ── Category grid ────────────────────────────
-  Widget _buildCategoryGrid() {
-    // Validate: if no category selected and form submitted, show red border
-    return FormField<String>(
-      validator:
-          (_) => _selectedCategory == null ? 'Please select a category' : null,
-      builder:
-          (state) => Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children:
-                    _categories.map((cat) {
-                      final isSelected = _selectedCategory == cat['value'];
-                      return GestureDetector(
-                        onTap:
-                            () => setState(() {
-                              _selectedCategory = cat['value'];
-                              state.didChange(cat['value']);
-                            }),
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 200),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 10,
-                          ),
-                          decoration: BoxDecoration(
-                            color:
-                                isSelected
-                                    ? _C.accent.withOpacity(0.15)
-                                    : _C.glass,
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
-                              color: isSelected ? _C.accent : _C.glassBorder,
-                              width: isSelected ? 1.5 : 1,
-                            ),
-                          ),
-                          child: Text(
-                            cat['label']!,
-                            style: _T.label.copyWith(
-                              color: isSelected ? _C.accent : _C.textMid,
-                              fontWeight:
-                                  isSelected
-                                      ? FontWeight.w700
-                                      : FontWeight.w400,
-                            ),
-                          ),
-                        ),
-                      );
-                    }).toList(),
-              ),
-              if (state.hasError)
-                Padding(
-                  padding: const EdgeInsets.only(top: 8, left: 4),
-                  child: Text(
-                    state.errorText!,
-                    style: _T.label.copyWith(color: _C.error, fontSize: 11),
-                  ),
-                ),
-            ],
-          ),
-    );
-  }
+Widget _buildFeedbackField() {
+  final overLimit = _wordCount > 1000;
 
-  // ── Feedback text area ───────────────────────
-  Widget _buildFeedbackField() {
-    final overLimit = _wordCount > 1000;
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(18),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-        child: Container(
-          decoration: BoxDecoration(
-            color: _C.inputFill,
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(
-              color: overLimit ? _C.error.withOpacity(0.5) : _C.glassBorder,
-            ),
-          ),
-          child: Column(
-            children: [
-              TextFormField(
-                controller: _feedbackController,
-                maxLines: 8,
-                style: _T.body.copyWith(
-                  color: const Color.fromARGB(255, 2, 2, 2),
-                  fontSize: 15,
-                ),
-                cursorColor: _C.accent,
-                decoration: InputDecoration(
-                  hintText: 'Tell us what happened — be specific...',
-                  hintStyle: _T.body.copyWith(color: _C.textLo, fontSize: 14),
-                  contentPadding: const EdgeInsets.all(20),
-                  border: InputBorder.none,
-                  errorStyle: const TextStyle(height: 0),
-                ),
-                validator: (val) {
-                  if (val == null || val.trim().length < 10) {
-                    return 'Please be more descriptive (min 10 chars)';
-                  }
-                  if (_wordCount > 1000) return 'Maximum 1000 words allowed';
-                  return null;
-                },
-              ),
-              Container(
-                padding: const EdgeInsets.fromLTRB(20, 10, 20, 14),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    if (_feedbackController.text.isNotEmpty)
-                      GestureDetector(
-                        onTap:
-                            () => setState(() => _feedbackController.clear()),
-                        child: Text(
-                          'Clear',
-                          style: _T.label.copyWith(
-                            fontSize: 12,
-                            color: _C.textLo,
-                          ),
-                        ),
-                      )
-                    else
-                      const SizedBox(),
-                    Text(
-                      '$_wordCount / 1000',
-                      style: _T.mono.copyWith(
-                        fontSize: 10,
-                        color: overLimit ? _C.error : _C.textLo,
-                        letterSpacing: 1,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
+  return ClipRRect(
+    borderRadius: BorderRadius.circular(18),
+    child: Container(
+      decoration: BoxDecoration(
+        // Light background so black typed text is visible
+        color: Colors.white.withOpacity(0.95),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: overLimit ? _C.error.withOpacity(0.5) : _C.glassBorder,
         ),
       ),
-    );
-  }
+      child: Column(
+        children: [
+          TextFormField(
+            controller: _feedbackController,
+            maxLines: 8,
 
-  // ── File section ─────────────────────────────
+            // This is the text people type
+            style: _T.body.copyWith(
+              color: Colors.black,
+              fontSize: 15,
+            ),
+
+            // This is the blinking cursor
+            cursorColor: Colors.black,
+
+            decoration: InputDecoration(
+              hintText: 'Tell us what happened — be specific...',
+
+              // This is the placeholder text
+              hintStyle: _T.body.copyWith(
+                color: Colors.black45,
+                fontSize: 14,
+              ),
+
+              contentPadding: const EdgeInsets.all(20),
+              border: InputBorder.none,
+              errorStyle: const TextStyle(height: 0),
+            ),
+
+            validator: (val) {
+              if (val == null || val.trim().length < 10) {
+                return 'Please be more descriptive, minimum 10 characters.';
+              }
+
+              if (_wordCount > 1000) {
+                return 'Maximum 1000 words allowed.';
+              }
+
+              return null;
+            },
+          ),
+
+          Container(
+            padding: const EdgeInsets.fromLTRB(20, 10, 20, 14),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                if (_feedbackController.text.isNotEmpty)
+                  GestureDetector(
+                    onTap: () {
+                      setState(() {
+                        _feedbackController.clear();
+                        _wordCount = 0;
+                      });
+                    },
+                    child: Text(
+                      'Clear',
+                      style: _T.label.copyWith(
+                        fontSize: 12,
+                        color: Colors.black54,
+                      ),
+                    ),
+                  )
+                else
+                  const SizedBox(),
+
+                Text(
+                  '$_wordCount / 1000',
+                  style: _T.mono.copyWith(
+                    fontSize: 10,
+                    color: overLimit ? _C.error : Colors.black54,
+                    letterSpacing: 1,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+}
   Widget _buildFileSection() {
     if (_selectedFile == null) {
       return GestureDetector(
@@ -519,9 +482,9 @@ class _SubmitFeedbackScreenState extends State<SubmitFeedbackScreen>
       );
     }
 
-    // File selected
     final fileName = _selectedFile!.path.split(Platform.pathSeparator).last;
     final ext = fileName.split('.').last.toUpperCase();
+
     return ClipRRect(
       borderRadius: BorderRadius.circular(18),
       child: BackdropFilter(
@@ -582,7 +545,6 @@ class _SubmitFeedbackScreenState extends State<SubmitFeedbackScreen>
     );
   }
 
-  // ── Submit button ────────────────────────────
   Widget _buildSubmitButton() {
     return GestureDetector(
       onTap: _isLoading ? null : _handleSubmit,
@@ -591,67 +553,63 @@ class _SubmitFeedbackScreenState extends State<SubmitFeedbackScreen>
         width: double.infinity,
         height: 58,
         decoration: BoxDecoration(
-          gradient:
-              _isLoading
-                  ? LinearGradient(
-                    colors: [
-                      _C.primary.withOpacity(0.5),
-                      _C.accent.withOpacity(0.5),
-                    ],
-                  )
-                  : const LinearGradient(
-                    colors: [_C.primary, _C.accent],
-                    begin: Alignment.centerLeft,
-                    end: Alignment.centerRight,
-                  ),
-          borderRadius: BorderRadius.circular(18),
-          boxShadow:
-              _isLoading
-                  ? []
-                  : [
-                    BoxShadow(
-                      color: _C.accent.withOpacity(0.3),
-                      blurRadius: 24,
-                      offset: const Offset(0, 8),
-                    ),
+          gradient: _isLoading
+              ? LinearGradient(
+                  colors: [
+                    _C.primary.withOpacity(0.5),
+                    _C.accent.withOpacity(0.5),
                   ],
+                )
+              : const LinearGradient(
+                  colors: [_C.primary, _C.accent],
+                  begin: Alignment.centerLeft,
+                  end: Alignment.centerRight,
+                ),
+          borderRadius: BorderRadius.circular(18),
+          boxShadow: _isLoading
+              ? []
+              : [
+                  BoxShadow(
+                    color: _C.accent.withOpacity(0.3),
+                    blurRadius: 24,
+                    offset: const Offset(0, 8),
+                  ),
+                ],
         ),
         child: Center(
-          child:
-              _isLoading
-                  ? const SizedBox(
-                    width: 22,
-                    height: 22,
-                    child: CircularProgressIndicator(
-                      color: Colors.white,
-                      strokeWidth: 2.5,
-                    ),
-                  )
-                  : Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(
-                        LucideIcons.send,
-                        size: 16,
-                        color: Colors.white,
-                      ),
-                      const SizedBox(width: 10),
-                      Text(
-                        'SEND ANONYMOUSLY',
-                        style: _T.mono.copyWith(
-                          color: Colors.white,
-                          fontSize: 13,
-                          letterSpacing: 1.5,
-                        ),
-                      ),
-                    ],
+          child: _isLoading
+              ? const SizedBox(
+                  width: 22,
+                  height: 22,
+                  child: CircularProgressIndicator(
+                    color: Colors.white,
+                    strokeWidth: 2.5,
                   ),
+                )
+              : Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(
+                      LucideIcons.send,
+                      size: 16,
+                      color: Colors.white,
+                    ),
+                    const SizedBox(width: 10),
+                    Text(
+                      'SEND ANONYMOUSLY',
+                      style: _T.mono.copyWith(
+                        color: Colors.white,
+                        fontSize: 13,
+                        letterSpacing: 1.5,
+                      ),
+                    ),
+                  ],
+                ),
         ),
       ),
     );
   }
 
-  // ── Privacy note ─────────────────────────────
   Widget _buildPrivacyNote() {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
@@ -659,14 +617,13 @@ class _SubmitFeedbackScreenState extends State<SubmitFeedbackScreen>
         const Icon(LucideIcons.lock, size: 12, color: _C.textLo),
         const SizedBox(width: 6),
         Text(
-          'No name, no IP, no trace — ever.',
+          'No name, no trace — ever.',
           style: _T.body.copyWith(fontSize: 11, color: _C.textLo),
         ),
       ],
     );
   }
 
-  // ── Settings dialog ──────────────────────────
   Widget _buildSettingsDialog(
     BuildContext dialogContext,
     SharedPreferences prefs,
@@ -734,9 +691,12 @@ class _SubmitFeedbackScreenState extends State<SubmitFeedbackScreen>
                   child: GestureDetector(
                     onTap: () async {
                       final ip = _ipController.text.trim();
+
                       if (ip.isNotEmpty) {
                         await prefs.setString('backend_ip', ip);
+
                         if (!mounted) return;
+
                         Navigator.pop(dialogContext);
                         _showSnackBar('Server IP updated to: $ip');
                       }
@@ -766,7 +726,6 @@ class _SubmitFeedbackScreenState extends State<SubmitFeedbackScreen>
     );
   }
 
-  // ── Bottom nav ───────────────────────────────
   Widget _buildBottomNav() {
     return ClipRect(
       child: BackdropFilter(
@@ -792,7 +751,9 @@ class _SubmitFeedbackScreenState extends State<SubmitFeedbackScreen>
             ),
             unselectedLabelStyle: const TextStyle(fontSize: 11),
             onTap: (index) {
-              if (index == 0) Navigator.pushReplacementNamed(context, '/home');
+              if (index == 0) {
+                Navigator.pushReplacementNamed(context, '/home');
+              }
             },
             items: const [
               BottomNavigationBarItem(
@@ -803,10 +764,6 @@ class _SubmitFeedbackScreenState extends State<SubmitFeedbackScreen>
                 icon: Icon(LucideIcons.plusCircle, size: 20),
                 label: 'Submit',
               ),
-              BottomNavigationBarItem(
-                icon: Icon(LucideIcons.clipboardList, size: 20),
-                label: 'My Reports',
-              ),
             ],
           ),
         ),
@@ -814,7 +771,6 @@ class _SubmitFeedbackScreenState extends State<SubmitFeedbackScreen>
     );
   }
 
-  // ── Success screen ───────────────────────────
   Widget _buildSuccessUI() {
     return Scaffold(
       backgroundColor: _C.bg,
@@ -822,12 +778,13 @@ class _SubmitFeedbackScreenState extends State<SubmitFeedbackScreen>
         children: [
           AnimatedBuilder(
             animation: _orb,
-            builder:
-                (_, __) => SizedBox.expand(
-                  child: CustomPaint(
-                    painter: _OrbPainter(_orb.value * 2 * math.pi),
-                  ),
+            builder: (_, __) {
+              return SizedBox.expand(
+                child: CustomPaint(
+                  painter: _OrbPainter(_orb.value * 2 * math.pi),
                 ),
+              );
+            },
           ),
           SafeArea(
             child: Center(
@@ -918,9 +875,9 @@ class _SubmitFeedbackScreenState extends State<SubmitFeedbackScreen>
                     ),
                     const SizedBox(height: 14),
                     TextButton.icon(
-                      onPressed:
-                          () =>
-                              Navigator.pushReplacementNamed(context, '/home'),
+                      onPressed: () {
+                        Navigator.pushReplacementNamed(context, '/home');
+                      },
                       icon: const Icon(
                         LucideIcons.home,
                         size: 14,
@@ -943,10 +900,11 @@ class _SubmitFeedbackScreenState extends State<SubmitFeedbackScreen>
 }
 
 // ─────────────────────────────────────────────
-//  Ambient Orb Painter (same as HomeScreen)
+//  Ambient Orb Painter
 // ─────────────────────────────────────────────
 class _OrbPainter extends CustomPainter {
   final double t;
+
   _OrbPainter(this.t);
 
   @override
@@ -955,12 +913,13 @@ class _OrbPainter extends CustomPainter {
       size.width * 0.8 + math.sin(t) * 40,
       size.height * 0.15 + math.cos(t * 0.7) * 30,
     );
+
     canvas.drawCircle(
       p1,
       200,
       Paint()
-        ..shader = RadialGradient(
-          colors: [const Color(0x251A56DB), Colors.transparent],
+        ..shader = const RadialGradient(
+          colors: [Color(0x251A56DB), Colors.transparent],
         ).createShader(Rect.fromCircle(center: p1, radius: 200)),
     );
 
@@ -968,12 +927,13 @@ class _OrbPainter extends CustomPainter {
       size.width * 0.15 + math.cos(t * 0.6) * 30,
       size.height * 0.6 + math.sin(t * 0.8) * 25,
     );
+
     canvas.drawCircle(
       p2,
       160,
       Paint()
-        ..shader = RadialGradient(
-          colors: [const Color(0x1838BDF8), Colors.transparent],
+        ..shader = const RadialGradient(
+          colors: [Color(0x1838BDF8), Colors.transparent],
         ).createShader(Rect.fromCircle(center: p2, radius: 160)),
     );
 
@@ -981,16 +941,17 @@ class _OrbPainter extends CustomPainter {
       size.width * 0.5 + math.sin(t * 0.4 + 1) * 20,
       size.height * 0.85 + math.cos(t * 0.5) * 15,
     );
+
     canvas.drawCircle(
       p3,
       120,
       Paint()
-        ..shader = RadialGradient(
-          colors: [const Color(0x1034D399), Colors.transparent],
+        ..shader = const RadialGradient(
+          colors: [Color(0x1034D399), Colors.transparent],
         ).createShader(Rect.fromCircle(center: p3, radius: 120)),
     );
   }
 
   @override
-  bool shouldRepaint(_OrbPainter old) => old.t != t;
+  bool shouldRepaint(_OrbPainter oldDelegate) => oldDelegate.t != t;
 }

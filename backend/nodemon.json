@@ -1,4 +1,8 @@
+
+
 {
+  "watch": ["server.js", "routes", "controllers", "models", "jobs", "services", "utils", "socket.js"],
+  "ext": "js,json",
   "ignore": [
     "uploads/*",
     "uploads/**/*",
@@ -9,6 +13,15 @@
     "python/faiss/*",
     "python/faiss/**/*",
     "*.index",
-    "*.pkl"
+    "*.pkl",
+    "python/faiss_index.bin",
+    "python/faiss_meta.json",
+    "python/faiss_categories.bin",
+    "python/faiss_categories_meta.json",
+    "python/faiss*.json",
+    "python/*.bin",
+    "python/__pycache__",
+    "python/venv"
+
   ]
 }

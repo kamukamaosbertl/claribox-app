@@ -25,6 +25,8 @@ const markdownComponents = {
   ol: ({ children }) => <ol className="mb-3 list-decimal space-y-1 pl-5">{children}</ol>,
   li: ({ children }) => <li className="leading-7">{children}</li>,
   strong: ({ children }) => <strong className="font-semibold text-slate-950">{children}</strong>,
+  h2: ({ children }) => <h2 className="mt-4 mb-1 text-sm font-bold text-slate-900">{children}</h2>,
+  h3: ({ children }) => <h3 className="mt-3 mb-1 text-sm font-semibold text-slate-800">{children}</h3>,
 };
 
 const ChatWithAI = () => {
@@ -185,6 +187,22 @@ const ChatWithAI = () => {
     }
   };
 
+const normalizeMarkdown = (text) => {
+  if (!text) return text;
+  return text
+    .replace(/^\*\s*$/gm, '')           // ← ADD: remove empty "* " lines
+    .replace(/^-\s*$/gm, '')            // ← ADD: remove empty "- " lines  
+    .replace(/^\*\s*/gm, '- ')
+    .replace(/^•\s*/gm, '- ')
+    .replace(/\.\s*\*\s*(?=[A-Z*])/g, '.\n\n**')
+    .replace(/:\s*\*\s*(?=[A-Z*])/g, ':\n\n**')
+    .replace(/\*\s+(?=[A-Z])/gm, '\n\n**')
+    .replace(/\s\*(?=[A-Z])/g, '\n\n**')
+    .replace(/(?<!\n)-\s(?=[A-Z])/gm, '\n- ')
+    .replace(/(\.)(\d+\.)\s+/g, '.\n$2 ')
+    .replace(/:\s*-\s*/g, ':\n- ')
+    .replace(/^\d+\.\s+/gm, (match) => match);
+};
   return (
     <div className="flex h-[calc(100vh-6rem)] flex-col overflow-hidden rounded-3xl border border-slate-200 bg-[#F6F8FC]">
       {/* Header */}
@@ -237,15 +255,17 @@ const ChatWithAI = () => {
                     {isUser ? (
                       <p className="whitespace-pre-wrap">{message.text}</p>
                     ) : message.streaming ? (
-                      <p className="whitespace-pre-wrap">
-                        {message.text}
-                        <span className="ml-1 inline-block h-4 w-[2px] animate-pulse bg-blue-500 align-middle" />
-                      </p>
-                    ) : (
+                    <div className="relative">
                       <ReactMarkdown components={markdownComponents}>
-                        {message.text}
+                        {normalizeMarkdown(message.text)}
                       </ReactMarkdown>
-                    )}
+                      <span className="ml-1 inline-block h-4 w-[2px] animate-pulse bg-blue-500 align-middle" />
+                    </div>
+                  ) : (
+                    <ReactMarkdown components={markdownComponents}>
+                      {normalizeMarkdown(message.text)}
+                    </ReactMarkdown>
+                  )}
 
                     <div className={`mt-2 text-[10px] ${isUser ? 'text-blue-100' : 'text-slate-400'}`}>
                       {message.timestamp.toLocaleTimeString([], {

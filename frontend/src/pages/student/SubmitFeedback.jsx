@@ -169,7 +169,7 @@ const SubmitFeedback = () => {
             <span style={{ fontSize: '11.5px', fontWeight: 700, color: '#2563EB' }}>Anonymous Submission</span>
           </div>
           <h1 style={{ fontSize: '26px', fontWeight: 800, color: '#0F172A', letterSpacing: '-0.035em', margin: '0 0 6px' }}>
-            Submit Your Feedback
+            What's on your mind? 
           </h1>
           <p style={{ fontSize: '13px', color: '#94A3B8', margin: 0 }}>
             Your feedback is completely anonymous — no personal data collected.
