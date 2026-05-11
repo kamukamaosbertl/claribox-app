@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Send, CheckCircle, AlertCircle, Phone, ArrowLeft, Paperclip, X, Lock, Sparkles } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { studentAPI } from '../../services/api';
-import ClariCoin from '../../components/dashboard/ClariCoin';
+
 
 const font = "'Plus Jakarta Sans', 'DM Sans', sans-serif";
 
@@ -345,8 +345,7 @@ const SubmitFeedback = () => {
         </div>
 
       </div>
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-      <ClariCoin size={48} />
+      
     </div>
   );
 };

@@ -4,7 +4,7 @@ import {
   Send, Shield, CheckCircle, Phone, AlertCircle,
   ArrowRight, Lock, Eye, Zap, Heart, Star, MessageCircle,
 } from 'lucide-react';
-import ClariCoin from '../../components/dashboard/ClariCoin';
+
 
 const font = "'Plus Jakarta Sans', 'DM Sans', sans-serif";
 
@@ -565,7 +565,7 @@ const Home = () => {
         }
       `}</style>
 
-      <ClariCoin size={48} />
+      
     </div>
   );
 };
